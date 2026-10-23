@@ -1,0 +1,44 @@
+{
+  "name": "flowforge-ai-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build --webpack",
+    "start": "next start --hostname 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "api:generate": "openapi-typescript ../backend/openapi.json -o src/lib/api/generated.ts",
+    "api:check": "node scripts/check-api.mjs"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "5.9.2",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@xyflow/react": "12.12.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-hook-form": "7.90.0",
+    "tailwind-merge": "^3.5.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "openapi-typescript": "7.13.0",
+    "prettier": "3.9.10",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,111 @@
+name: flowforge-ai
+x-backend: &backend
+  build: ./backend
+  volumes:
+    - ./.local/secrets/credential-master.key:/run/secrets/flowforge-credentials.key:ro
+  environment: &backend-env
+    DATABASE_URL: postgresql+psycopg://ff_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@postgres:5432/flowforge
+    REDIS_URL: redis://redis:6379/0
+    SESSION_SIGNING_KEY: ${SESSION_SIGNING_KEY:?Set SESSION_SIGNING_KEY in .env}
+    PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+    MCP_CATALOG_JSON: ${MCP_CATALOG_JSON:-[]}
+    SMTP_HOST: ${SMTP_HOST:-mailpit}
+    SMTP_PORT: ${SMTP_PORT:-1025}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+    MAIL_FROM: ${MAIL_FROM:-FlowForge <no-reply@flowforge.local>}
+    TEST_DATABASE_URL: postgresql+psycopg://flowforge:${POSTGRES_PASSWORD}@postgres:5432/flowforge_test
+  networks: [data]
+services:
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports: ["127.0.0.1:8025:8025"]
+    networks: [data]
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: flowforge
+      POSTGRES_DB: flowforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/init-db.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U flowforge -d flowforge"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --appendonly, "yes"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+  migrate:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      DATABASE_URL: postgresql+psycopg://flowforge:${POSTGRES_PASSWORD}@postgres:5432/flowforge
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres: {condition: service_healthy}
+  api:
+    <<: *backend
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  agent-worker:
+    <<: *backend
+    command: [celery, -A, app.modules.executions.worker:celery, worker, --loglevel=info, --queues=agents, --concurrency=2]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+  maintenance:
+    <<: *backend
+    command: [python, -m, app.modules.executions.worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    environment:
+      INTERNAL_API_URL: http://api:8000
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend/src:/app/src:ro
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [data]
+  edge:
+    image: nginx:1.28-alpine
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: [./infra/nginx.conf:/etc/nginx/nginx.conf:ro]
+    depends_on: [frontend, api]
+    networks: [data]
+  tests:
+    <<: *backend
+    profiles: [test]
+    command: [pytest, -q, -p, "no:cacheprovider"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      mailpit: {condition: service_started}
+volumes:
+  postgres-data:
+  redis-data:
+networks:
+  data:

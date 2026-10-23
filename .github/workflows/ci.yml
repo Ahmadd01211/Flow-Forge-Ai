@@ -1,0 +1,34 @@
+name: FlowForge checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run api:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python scripts/init-env.py
+      - run: docker compose run --rm --build migrate
+      - run: docker compose --profile test run --rm --build tests ruff check app tests migrations scripts
+      - run: docker compose --profile test run --rm tests python scripts/export_openapi.py --check
+      - run: docker compose --profile test run --rm tests
+      - if: always()
+        run: docker compose down
