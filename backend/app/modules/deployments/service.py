@@ -46,8 +46,16 @@ def _new_key() -> tuple[str, str, str]:
 
 
 def _agent_ready(
-    version: AgentVersion, connection: IntegrationConnection | None, installed: set[str]
+    version: AgentVersion, connection: IntegrationConnection | None, installed: set[str], db=None, raw_catalog="[]"
 ) -> bool:
+    from fastapi import HTTPException
+
+    from app.modules.agents.tool_grants import validate_grants
+    if version.config.get("mcp_tools") or version.config.get("http_tools"):
+        try:
+            validate_grants(db, version.workspace_id, version.config, raw_catalog)
+        except HTTPException:
+            return False
     return bool(
         (version.config.get("provider", "openai"), version.config.get("model_id")) in MODEL_PRICES
         and connection
@@ -86,12 +94,12 @@ def eligible(db: Session, workspace_id: uuid.UUID, mcp_catalog_json: str = "[]")
         "items": [
             {"kind": "agent", "version_id": row.id, "name": row.name, "number": row.number}
             for row in agents
-            if _agent_ready(row, connections.get(row.connection_id), installed)
+            if _agent_ready(row, connections.get(row.connection_id), installed, db, mcp_catalog_json)
         ]
         + [
             {"kind": "workflow", "version_id": row.id, "name": row.name, "number": row.number}
             for row in workflows
-            if validation(db, workspace_id, Graph.model_validate(row.graph), mcp_catalog_json)["publishable"]
+            if validation(db, workspace_id, Graph.model_validate(row.graph), mcp_catalog_json, root_workflow_id=row.workflow_id)["publishable"]
         ]
     }
 
@@ -132,7 +140,7 @@ def create(
                 )
             )
         )
-        if not version or not _agent_ready(version, connection, installed):
+        if not version or not _agent_ready(version, connection, installed, db, mcp_catalog_json):
             fail(422, "DEPLOYMENT_TARGET_INVALID", "Select an executable published agent version.")
     else:
         version = db.scalar(
@@ -208,7 +216,7 @@ def revoke(
             .where(
                 model.workspace_id == workspace_id,
                 model.deployment_id == row.id,
-                model.state.in_(["queued", "running"]),
+                model.state.in_(["queued", "running", "waiting"]),
             )
             .with_for_update()
         ).all()
@@ -217,6 +225,9 @@ def revoke(
             if run.state == "queued":
                 run.state = "cancelled"
                 run.finished_at = now
+                if isinstance(run, WorkflowRun):
+                    from app.modules.workflows.checkpoints import settle_unfinished
+                    settle_unfinished(db, run, "RUN_CANCELLED")
         record(
             db,
             workspace_id,

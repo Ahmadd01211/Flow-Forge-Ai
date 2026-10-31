@@ -1,4 +1,5 @@
 "use client";
+import { LocalTime } from "@/components/shared/local-time";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,7 @@ import type {
 } from "@/lib/api/types";
 import { compareDefinitions, displayValue } from "./version-diff";
 import { isRunnableModel } from "./runnable-models";
+import { RegressionPanel } from "./regression-panel";
 
 export function VersionHistory({
   agent,
@@ -130,7 +132,7 @@ export function VersionHistory({
                   <Badge tone="purple">{v.purpose}</Badge>
                 </strong>
                 <span>From draft r{v.source_revision}</span>
-                <small>{new Date(v.created_at).toLocaleString()}</small>
+                <small><LocalTime value={v.created_at} /></small>
                 <p>{v.change_summary || "No change summary"}</p>
               </div>
             </button>
@@ -236,6 +238,7 @@ export function VersionHistory({
                 </p>
               </div>
             )}
+            <RegressionPanel key={selected.id} workspaceId={agent.workspace_id} agentId={agent.id} versionId={selected.id} canEdit={canEdit} />
             <div className="version-actions">
               {selected.purpose === "published" &&
                 isRunnableModel(

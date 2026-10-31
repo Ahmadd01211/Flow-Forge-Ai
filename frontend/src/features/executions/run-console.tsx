@@ -1,4 +1,5 @@
 "use client";
+import { LocalTime } from "@/components/shared/local-time";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -155,7 +156,7 @@ export function RunConsole({
               className={`run-list-row ${run.id === selectedId ? "active" : ""}`}
               onClick={() => setSelectedId(run.id)}
             >
-              <span><strong>{run.id.slice(0, 8)}</strong><small>{new Date(run.created_at).toLocaleString()}</small></span>
+              <span><strong>{run.id.slice(0, 8)}</strong><small><LocalTime value={run.created_at} /></small></span>
               <Badge tone={stateTone(run.state)}>{run.state}</Badge>
             </button>
           ))}
@@ -168,7 +169,7 @@ export function RunConsole({
                 <Badge tone={stateTone(selected.state)}>{selected.state}</Badge>
               </div>
               <dl className="run-facts">
-                <div><dt>Started</dt><dd>{selected.started_at ? new Date(selected.started_at).toLocaleString() : "Waiting for worker"}</dd></div>
+                <div><dt>Started</dt><dd>{selected.started_at ? <LocalTime value={selected.started_at} /> : "Waiting for worker"}</dd></div>
                 <div><dt>Maximum estimated cost</dt><dd>${selected.reserved_max_usd}</dd></div>
                 <div><dt>Measured cost</dt><dd>{selected.cost_usd ? `$${selected.cost_usd}` : "—"}</dd></div>
                 <div><dt>Tokens</dt><dd>{selected.input_tokens ?? "—"} in / {selected.output_tokens ?? "—"} out</dd></div>
@@ -180,7 +181,7 @@ export function RunConsole({
               {selected.output && (
                 <div className="run-output"><div className="run-panel-heading"><h3>Output</h3><Badge tone="green">Validated JSON</Badge></div><pre>{JSON.stringify(selected.output, null, 2)}</pre></div>
               )}
-              <div className="run-trace"><h3>Execution trace</h3>{events.length ? <ol>{events.map((event) => <li key={event.id}><span>{event.sequence}</span><div><strong>{event.kind === "tool" ? event.tool_key : event.kind}</strong><small>{event.status}{event.input_tokens !== null ? ` · ${event.input_tokens} in / ${event.output_tokens} out` : ""}{event.error_code ? ` · ${event.error_code}` : ""}</small></div><time>{new Date(event.created_at).toLocaleTimeString()}</time></li>)}</ol> : <p>No trace events yet.</p>}</div>
+              <div className="run-trace"><h3>Execution trace</h3>{events.length ? <ol>{events.map((event) => <li key={event.id}><span>{event.sequence}</span><div><strong>{event.kind === "tool" ? event.tool_key : event.kind}</strong><small>{event.status}{event.input_tokens !== null ? ` · ${event.input_tokens} in / ${event.output_tokens} out` : ""}{event.error_code ? ` · ${event.error_code}` : ""}</small></div><LocalTime value={event.created_at} format="time" /></li>)}</ol> : <p>No trace events yet.</p>}</div>
               {!terminal.has(selected.state) && canRun && (
                 <Button variant="outline" size="sm" onClick={cancel} disabled={busy || selected.cancel_requested}>
                   <Square size={13} /> {selected.cancel_requested ? "Cancellation requested" : "Cancel run"}

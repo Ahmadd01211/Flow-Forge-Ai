@@ -79,3 +79,26 @@ def test_minimal_workflow_preview_and_revision_guard(client, owner):
         path, headers=headers(client), json={"expected_revision": 1, "input": {"ticket": "A"}}
     )
     assert preview.status_code == 200 and preview.json()["output"] == {"ticket": "A"}
+
+
+def test_draft_check_reports_field_errors_without_saving(client, owner):
+    workspace = owner["workspaces"][0]["id"]
+    base = f"/api/v1/workspaces/{workspace}/workflows"
+    workflow = client.post(base, headers=headers(client), json={"name": "Draft"}).json()
+    graph = workflow["graph"]
+    graph["nodes"].insert(1, {
+        "id": "decide", "type": "condition", "label": "Decide", "position": {"x": 300, "y": 180},
+        "config": {"operator": "eq", "left": {"kind": "input", "pointer": "nope"}},
+    })
+    graph["nodes"][0]["config"] = {"secret": "not-stored-here"}
+    path = f"{base}/{workflow['id']}"
+    checked = client.post(f"{path}/check", headers=headers(client), json={"graph": graph})
+    assert checked.status_code == 200, checked.text
+    body = checked.json()
+    assert not body["valid"] and not body["publishable"]
+    paths = {(e["node_id"], e["path"]) for e in body["errors"] if e["code"] == "NODE_CONFIG_INVALID"}
+    assert paths == {("decide", "config.left.pointer"), ("decide", "config.right")}
+    assert [(w["node_id"], w["path"]) for w in body["warnings"]] == [("input", "config.secret")]
+    assert client.get(path).json()["revision"] == 1
+    other = f"/api/v1/workspaces/{workspace}/workflows/00000000-0000-0000-0000-000000000000/check"
+    assert client.post(other, headers=headers(client), json={"graph": graph}).status_code == 404

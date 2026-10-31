@@ -1,4 +1,3 @@
-import time
 import uuid
 
 from fastapi import APIRouter, Depends, Request
@@ -67,12 +66,7 @@ def test_remote_tool(
     db: Session = Depends(get_db),
 ):
     authorize(request, db, workspace_id, write=True)
-    bucket = f"mcp-test:{workspace_id}:{int(time.time()) // 60}"
-    count = request.app.state.redis.incr(bucket)
-    if count == 1:
-        request.app.state.redis.expire(bucket, 70)
-    if count > 20:
-        fail(429, "MCP_RATE_LIMIT", "Too many MCP tool tests. Try again shortly.")
+    service.check_test_rate(request.app.state.redis, workspace_id)
     return service.test_tool(
         db,
         workspace_id,

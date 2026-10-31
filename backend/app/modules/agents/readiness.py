@@ -11,7 +11,7 @@ from app.providers.openai import validate_output_schema
 from app.providers.profiles import capability
 
 
-def assess(db, workspace_id, config, connection):
+def assess(db, workspace_id, config, connection, raw_catalog="[]"):
     errors, warnings = [], []
 
     def issue(code, message, section, warning=False):
@@ -42,7 +42,7 @@ def assess(db, workspace_id, config, connection):
             "model",
             True,
         )
-    if config["tool_keys"]:
+    if config["tool_keys"] or config.get("mcp_tools") or config.get("http_tools"):
         if config["limits"]["max_tool_calls"] < 1:
             issue(
                 "TOOL_CALL_LIMIT", "Allow at least one tool call when tools are selected.", "limits"
@@ -66,6 +66,18 @@ def assess(db, workspace_id, config, connection):
                 "Approve every selected tool in the workspace before publishing.",
                 "model",
             )
+    if config.get("mcp_tools"):
+        from app.modules.mcp.agent_grants import pin
+        try:
+            pin(db, workspace_id, config["mcp_tools"], raw_catalog)
+        except HTTPException as exc:
+            issue(exc.detail["code"], exc.detail["message"], "model")
+    if config.get("http_tools"):
+        from app.modules.http_tools.service import pin as pin_http
+        try:
+            pin_http(db, workspace_id, config["http_tools"])
+        except HTTPException as exc:
+            issue(exc.detail["code"], exc.detail["message"], "model")
     if Decimal(config["limits"]["max_cost_usd"]) <= 0:
         issue("BUDGET_TOO_SMALL", "Set a run budget above zero.", "limits")
     if config["provider"] in {"openai", "openrouter"}:

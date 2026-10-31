@@ -41,7 +41,7 @@ def capability(provider: str, model_id: str) -> ModelCapability:
         return ModelCapability()
     return ModelCapability(
         runnable=True,
-        local_tools=provider == "openai",
+        local_tools=True,
         structured_output=True,
         input_usd_per_million=rates[0],
         output_usd_per_million=rates[1],

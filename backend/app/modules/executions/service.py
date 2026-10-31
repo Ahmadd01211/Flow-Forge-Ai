@@ -2,7 +2,7 @@ import hashlib
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -69,6 +69,7 @@ def submit(
     idempotency_key: str,
     master: bytes,
     deployment_id: uuid.UUID | None = None,
+    raw_catalog: str = "[]",
 ) -> tuple[AgentRun, bool]:
     if not 8 <= len(idempotency_key) <= 128 or any(c.isspace() for c in idempotency_key):
         fail(
@@ -113,6 +114,8 @@ def submit(
     if not version:
         fail(404, "NOT_FOUND", "Published agent version not found.")
     config = version.config
+    from app.modules.agents.tool_grants import validate_grants
+    validate_grants(db, workspace_id, config, raw_catalog)
     model = (config.get("provider", "openai"), config.get("model_id"))
     if model not in MODEL_PRICES:
         fail(422, "RUNTIME_UNSUPPORTED", "This model does not have a live execution adapter yet.")
@@ -152,7 +155,7 @@ def submit(
         )
     input_text = canonical(body.input)
     estimated_input_bytes = (
-        len((config["instructions"] + input_text + canonical(config["output_schema"])).encode())
+        len((config["instructions"] + input_text + canonical(config["output_schema"]) + canonical(config.get("mcp_tools", [])) + canonical(config.get("http_tools", []))).encode())
         + 4096
     )
     if estimated_input_bytes > MAX_INPUT_BYTES:
@@ -171,7 +174,10 @@ def submit(
             "The run budget cannot cover the input and minimum output allowance.",
         )
     # Multi-turn tool runs may consume the whole configured budget across calls.
-    reserved = budget if config.get("tool_keys") else input_reserve + output_price * max_output
+    reserved = budget if config.get("tool_keys") or config.get("mcp_tools") or config.get("http_tools") else input_reserve + output_price * max_output
+    reserved = reserved.quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
+    from app.modules.workspaces.usage import admit
+    admit(db, workspace_id, reserved)
     run_id = uuid.uuid4()
     nonce, encrypted = encrypt_secret(master, workspace_id, run_id, 1, input_text)
     run = AgentRun(

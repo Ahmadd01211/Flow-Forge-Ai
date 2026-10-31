@@ -54,7 +54,8 @@ def test_condition_routes_both_paths_in_published_runs(client, owner):
         result = _run(client, workspace, version.json()["id"], {"urgent": urgent}, f"branch-run-{port}")
         assert result["state"] == "completed" and result["output"] == {"queue": expected}
         assert result["steps"][1]["selected_port"] == port
-        assert len(result["steps"]) == 4
+        assert len(result["steps"]) == 5
+        assert sum(step["status"] == "skipped" for step in result["steps"]) == 1
 
 
 def test_parse_filter_and_template_pipeline(client, owner):

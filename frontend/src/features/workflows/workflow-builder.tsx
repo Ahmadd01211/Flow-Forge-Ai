@@ -1,5 +1,13 @@
 "use client";
-import { memo, useCallback, useState } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import {
   addEdge,
@@ -33,6 +41,7 @@ import {
   FileJson,
   FileText,
   ListFilter,
+  Repeat2,
   List,
   LoaderCircle,
   LockKeyhole,
@@ -51,19 +60,38 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SaveTemplate } from "@/features/templates/save-template";
 import { Badge, ErrorNotice } from "@/components/shared/ui";
 import { api } from "@/lib/api/client";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
 import { connectInsertedNode } from "./graph-edit";
+import {
+  configSummary,
+  inputFieldHints,
+  issuesByNode,
+  upstreamIds,
+  type NodeIssues,
+  requiresPublishedRun,
+} from "./node-config";
+import { NodeConfigForm, type FormContext } from "./node-config-forms";
+import { NodeTestPanel, type NodeTestState } from "./node-test-panel";
+import { DataMappings } from "./data-mappings";
 import type {
   Graph,
   GraphNode,
   NodeKind,
+  ToolOption,
   Validation,
   Workflow,
 } from "@/lib/api/types";
 
 type CanvasNode = Node<{ definition: GraphNode }, "flowforge">;
+// Issues flow to canvas nodes through context so they never enter the saved graph definition.
+const IssuesContext = createContext<{
+  issues: NodeIssues;
+  checked: boolean;
+  toolNames: Record<string, string>;
+}>({ issues: {}, checked: false, toolNames: {} });
 const kinds: {
   type: NodeKind;
   name: string;
@@ -119,11 +147,38 @@ const kinds: {
     enabled: true,
   },
   {
+    type: "approval",
+    name: "Human approval",
+    description: "Pause for an owner or admin decision",
+    icon: ShieldCheck,
+    tone: "purple",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "wait",
+    name: "Wait",
+    description: "Resume later with a durable timer",
+    icon: CircleDot,
+    tone: "amber",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
     type: "transform",
     name: "Transform",
     description: "Build an object from literals and input fields",
     icon: Braces,
     tone: "blue",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "merge",
+    name: "Merge paths",
+    description: "Wait for and combine connected paths",
+    icon: GitBranch,
+    tone: "amber",
     group: "LOGIC",
     enabled: true,
   },
@@ -164,6 +219,33 @@ const kinds: {
     enabled: true,
   },
   {
+    type: "subworkflow",
+    name: "Subworkflow",
+    description: "Reuse a published workflow version",
+    icon: WorkflowIcon,
+    tone: "purple",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "for_each",
+    name: "For each item",
+    description: "Run a workflow for each list item",
+    icon: Repeat2,
+    tone: "purple",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "http_tool",
+    name: "HTTP API",
+    description: "Read or write through an approved API",
+    icon: PlugZap,
+    tone: "blue",
+    group: "TOOLS",
+    enabled: true,
+  },
+  {
     type: "mcp_tool",
     name: "MCP tool",
     description: "Call an approved read-only service tool",
@@ -189,8 +271,21 @@ const FlowNode = memo(function FlowNode({
   const d = data.definition,
     kind = kinds.find((k) => k.type === d.type)!;
   const Icon = kind.icon;
+  const { issues: allIssues, checked, toolNames } = useContext(IssuesContext);
+  const issues = allIssues[d.id] ?? [],
+    errors = issues.filter((issue) => issue.severity === "error"),
+    summary = configSummary(d, toolNames);
+  const state = errors.length
+    ? "error"
+    : issues.length
+      ? "warning"
+      : checked
+        ? "ready"
+        : "draft";
   return (
-    <div className={`flowforge-node ${selected ? "selected" : ""}`}>
+    <div
+      className={`flowforge-node ${selected ? "selected" : ""} ${state === "error" ? "has-errors" : ""}`}
+    >
       <div className="flow-node-top">
         <span className={`node-icon ${kind.tone}`}>
           <Icon size={19} />
@@ -199,36 +294,46 @@ const FlowNode = memo(function FlowNode({
         <MoreHorizontal size={15} />
       </div>
       <strong>{d.label}</strong>
-      <p>
-        {d.type === "agent"
-          ? "Select a published agent version"
-          : d.type === "condition"
-            ? "Compare values and select a path"
-            : d.type === "transform"
-              ? "Structured field mapping"
-              : d.type === "text_template"
-                ? "Compose text from input fields"
-                : d.type === "list_filter"
-                  ? "Select matching list items"
-                  : d.type === "json_parse"
-                    ? "Parse a JSON string"
-                : d.type === "mcp_tool"
-                  ? "Call a reviewed remote tool"
-                : d.type === "result"
-                ? "Return workflow output"
-                  : d.type === "webhook_trigger"
-                    ? "Receive an HTTP event"
-                    : d.type === "schedule_trigger"
-                      ? "Run on a schedule"
-                : "Provide workflow input"}
+      <p className={summary ? "flow-node-summary" : undefined}>
+        {summary ??
+          (d.type === "agent"
+            ? "Select a published agent version"
+            : d.type === "condition"
+              ? "Compare values and select a path"
+              : d.type === "transform"
+                ? "Structured field mapping"
+                : d.type === "text_template"
+                  ? "Compose text from input fields"
+                  : d.type === "list_filter"
+                    ? "Select matching list items"
+                    : d.type === "json_parse"
+                      ? "Parse a JSON string"
+                      : d.type === "mcp_tool"
+                        ? "Call a reviewed remote tool"
+                        : d.type === "result"
+                          ? "Return workflow output"
+                          : d.type === "webhook_trigger"
+                            ? "Receive an HTTP event"
+                            : d.type === "schedule_trigger"
+                              ? "Run on a schedule"
+                              : "Provide workflow input")}
       </p>
-      <div className="flow-node-footer">
+      <div className={`flow-node-footer ${state}`} title={issues[0]?.message}>
         <span className="node-state-dot" />
-        Draft configuration{d.type === "agent" && <LockKeyhole size={11} />}
+        {state === "error"
+          ? `${errors.length} ${errors.length === 1 ? "issue" : "issues"} to fix`
+          : state === "warning"
+            ? `${issues.length} ${issues.length === 1 ? "warning" : "warnings"}`
+            : state === "ready"
+              ? "Configured"
+              : "Draft configuration"}
+        {d.type === "agent" && <LockKeyhole size={11} />}
       </div>
-      {d.type !== "manual_input" && d.type !== "webhook_trigger" && d.type !== "schedule_trigger" && (
-        <Handle type="target" position={Position.Left} id="in" />
-      )}
+      {d.type !== "manual_input" &&
+        d.type !== "webhook_trigger" &&
+        d.type !== "schedule_trigger" && (
+          <Handle type="target" position={Position.Left} id="in" />
+        )}
       {d.type !== "result" &&
         (d.type === "condition" ? (
           <>
@@ -274,7 +379,27 @@ function canvasEdges(graph: Graph): Edge[] {
   }));
 }
 
-export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPublishedVersion }: { workflow: Workflow; agentOptions: { id: string; name: string; number: number; provider: string; model_id: string; tool_keys: string[] }[]; mcpOptions: { id: string; name: string; runnable_tools: string[]; runnable_schemas: Record<string, unknown> }[]; initialPublishedVersion: string | null }) {
+export function WorkflowBuilder({
+  workflow,
+  agentOptions,
+  mcpOptions,
+  httpOptions,
+  workflowOptions: initialWorkflowOptions,
+  toolOptions,
+  initialPublishedVersion,
+}: {
+  workflow: Workflow;
+  agentOptions: FormContext["agentOptions"];
+  mcpOptions: FormContext["mcpOptions"];
+  httpOptions: FormContext["httpOptions"];
+  workflowOptions: FormContext["workflowOptions"];
+  toolOptions: ToolOption[];
+  initialPublishedVersion: string | null;
+}) {
+  const [workflowOptions, setWorkflowOptions] = useState(
+    initialWorkflowOptions,
+  );
+  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(
       canvasNodes(workflow.graph),
     ),
@@ -283,14 +408,30 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
     );
   const [name, setName] = useState(workflow.name),
     [revision, setRevision] = useState(workflow.revision),
-    [selected, setSelected] = useState<string | null>(workflow.graph.nodes.find((node) => ["manual_input", "webhook_trigger", "schedule_trigger"].includes(node.type))?.id || null),
+    [selected, setSelected] = useState<string | null>(
+      workflow.graph.nodes.find((node) =>
+        ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+          node.type,
+        ),
+      )?.id || null,
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [validation, setValidation] = useState<Validation | null>(null),
     [panel, setPanel] = useState(true),
     [query, setQuery] = useState(""),
     [inspectorTab, setInspectorTab] = useState("configuration"),
-    [configText, setConfigText] = useState(JSON.stringify(workflow.graph.nodes.find((node) => ["manual_input", "webhook_trigger", "schedule_trigger"].includes(node.type))?.config || {}, null, 2)),
+    [configText, setConfigText] = useState(
+      JSON.stringify(
+        workflow.graph.nodes.find((node) =>
+          ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+            node.type,
+          ),
+        )?.config || {},
+        null,
+        2,
+      ),
+    ),
     [listView, setListView] = useState(false),
     [target, setTarget] = useState(""),
     [port, setPort] = useState("out"),
@@ -303,7 +444,9 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
     output: unknown;
     steps: { node_id: string; type: string; status: string; output: unknown }[];
   } | null>(null);
-  const [publishedVersion, setPublishedVersion] = useState<string | null>(initialPublishedVersion);
+  const [publishedVersion, setPublishedVersion] = useState<string | null>(
+    initialPublishedVersion,
+  );
   const [durableRun, setDurableRun] = useState<{
     id: string;
     state: string;
@@ -333,9 +476,123 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
   useUnsavedChanges(dirty);
   const active = nodes.find((n) => n.id === selected),
     activeKind = kinds.find((k) => k.type === active?.data.definition.type);
+  // Positions never affect validity, so dragging does not trigger a check.
+  const checkKey = JSON.stringify({
+    ...graph,
+    nodes: graph.nodes.map(({ position: _position, ...rest }) => rest),
+  });
+  const checkSeq = useRef(0);
+  const [checkError, setCheckError] = useState("");
+  const [tests, setTests] = useState<Record<string, NodeTestState>>({});
+  const setTest = useCallback((nodeId: string, update: NodeTestState) => {
+    setTests((current) => ({
+      ...current,
+      [nodeId]: { ...current[nodeId], ...update },
+    }));
+  }, []);
+  useEffect(() => {
+    const seq = ++checkSeq.current;
+    const timer = setTimeout(async () => {
+      const draft = JSON.parse(checkKey) as Omit<Graph, "nodes"> & {
+        nodes: Omit<GraphNode, "position">[];
+      };
+      try {
+        const result = await api<Validation>(
+          `/workspaces/${workflow.workspace_id}/workflows/${workflow.id}/check`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              graph: {
+                ...draft,
+                nodes: draft.nodes.map((node) => ({
+                  ...node,
+                  position: { x: 0, y: 0 },
+                })),
+              },
+            }),
+          },
+        );
+        if (seq !== checkSeq.current) return;
+        setValidation(result);
+        setCheckError("");
+      } catch (cause) {
+        if (seq === checkSeq.current)
+          setCheckError(
+            cause instanceof Error ? cause.message : "Live check unavailable.",
+          );
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [checkKey, workflow.workspace_id, workflow.id, workflowOptions]);
+  const nodeIssues = issuesByNode(validation),
+    activeIssues = (active && nodeIssues[active.id]) || [],
+    blockingErrors = validation?.errors.length ?? 0,
+    blockedTitle = blockingErrors
+      ? `Fix ${blockingErrors} ${blockingErrors === 1 ? "issue" : "issues"} first. Drafts can still be saved.`
+      : "";
+  const toolNames = Object.fromEntries([
+    ...toolOptions.map((tool) => [tool.key, tool.name]),
+    ...workflowOptions.map((option) => [
+      option.id,
+      `${option.name} v${option.number}`,
+    ]),
+  ]);
+  const needsPublishedRun = requiresPublishedRun(graph.nodes, workflowOptions);
+  const activeConfig = active?.data.definition.config ?? {},
+    activeAgent = agentOptions.find(
+      (option) => option.id === activeConfig.version_id,
+    ),
+    externalTarget =
+      active?.data.definition.type === "agent"
+        ? activeAgent
+          ? `the agent “${activeAgent.name}” v${activeAgent.number} on ${activeAgent.provider}/${activeAgent.model_id}`
+          : "a published agent"
+        : active?.data.definition.type === "mcp_tool"
+          ? `${mcpOptions.find((server) => server.id === activeConfig.server_id)?.name ?? String(activeConfig.server_id)} · ${String(activeConfig.tool_name)}`
+          : active?.data.definition.type === "http_tool"
+            ? (httpOptions.find((tool) => tool.id === activeConfig.tool_id)
+                ?.url ?? "an approved HTTP API")
+            : null,
+    testBlocked =
+      activeIssues.find(
+        (issue) =>
+          issue.severity === "error" &&
+          (issue.path?.startsWith("config") ||
+            issue.path?.startsWith("policy.")),
+      )?.message ?? null;
+  const formContext: FormContext = {
+    workspaceId: workflow.workspace_id,
+    nodes: graph.nodes,
+    upstream: active ? upstreamIds(graph.edges, active.id) : [],
+    inputHints: inputFieldHints(graph.input_schema),
+    agentOptions,
+    mcpOptions,
+    httpOptions,
+    workflowOptions,
+    refreshWorkflows,
+    loadingWorkflows,
+    toolOptions,
+  };
+  async function refreshWorkflows() {
+    setLoadingWorkflows(true);
+    setError("");
+    try {
+      const result = await api<{ items: FormContext["workflowOptions"] }>(
+        `/workspaces/${workflow.workspace_id}/workflows/call-options?exclude_workflow_id=${workflow.id}`,
+      );
+      setWorkflowOptions(result.items);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not refresh published workflows.",
+      );
+    } finally {
+      setLoadingWorkflows(false);
+    }
+  }
   function remember() {
     setHistory((h) => [...h.slice(-29), structuredClone(graph)]);
-    setValidation(null);
   }
   function selectNode(id: string) {
     setSelected(id);
@@ -349,12 +606,25 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
     setInspectorTab("configuration");
   }
   function addNode(type: NodeKind) {
-    if (type === "result" && nodes.some((n) => n.data.definition.type === type)) return;
-    if (["manual_input", "webhook_trigger", "schedule_trigger"].includes(type) && nodes.some((n) => ["manual_input", "webhook_trigger", "schedule_trigger"].includes(n.data.definition.type))) {
-      setError("A workflow can have one trigger. Remove the existing trigger first.");
+    if (type === "result" && nodes.some((n) => n.data.definition.type === type))
+      return;
+    if (
+      ["manual_input", "webhook_trigger", "schedule_trigger"].includes(type) &&
+      nodes.some((n) =>
+        ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+          n.data.definition.type,
+        ),
+      )
+    ) {
+      setError(
+        "A workflow can have one trigger. Remove the existing trigger first.",
+      );
       return;
     }
-    if (type === "condition" && nodes.some((n) => n.data.definition.type === "condition")) {
+    if (
+      type === "condition" &&
+      nodes.some((n) => n.data.definition.type === "condition")
+    ) {
       setError("Published workflows currently support one condition node.");
       return;
     }
@@ -362,60 +632,143 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
     const kind = kinds.find((k) => k.type === type)!;
     const id = `${type}-${crypto.randomUUID().slice(0, 8)}`;
     const selectedNode = nodes.find((n) => n.id === selected);
-    const source = selectedNode?.data.definition.type === "result"
-      ? nodes.find((n) => n.id === edges.find((edge) => edge.target === selectedNode.id)?.source)
-      : selectedNode;
+    const source =
+      selectedNode?.data.definition.type === "result"
+        ? nodes.find(
+            (n) =>
+              n.id ===
+              edges.find((edge) => edge.target === selectedNode.id)?.source,
+          )
+        : selectedNode;
     const branchPort = port === "false" ? "false" : "true";
     const outgoing = source
-      ? edges.filter((edge) => edge.source === source.id && (source.data.definition.type !== "condition" || edge.sourceHandle === branchPort))
+      ? edges.filter(
+          (edge) =>
+            edge.source === source.id &&
+            (source.data.definition.type !== "condition" ||
+              edge.sourceHandle === branchPort),
+        )
       : [];
-    const next = outgoing.length === 1 ? nodes.find((n) => n.id === outgoing[0].target) : undefined;
+    const next =
+      outgoing.length === 1
+        ? nodes.find((n) => n.id === outgoing[0].target)
+        : undefined;
     const config: Record<string, unknown> =
-      type === "condition"
+      type === "approval"
         ? {
-            operator: "eq",
-            left: { kind: "literal", value: true },
-            right: { kind: "literal", value: true },
+            prompt: "Review the input before continuing.",
+            expires_seconds: 3600,
+            allow_requester: false,
           }
-        : type === "agent"
-          ? { version_id: "" }
-        : type === "transform"
-          ? {
-              fields: { message: { kind: "literal", value: "" } },
-              output_schema: {
-                type: "object",
-                properties: { message: { type: "string" } },
-              },
-            }
-          : type === "text_template"
-            ? { template: "Ticket {{/ticket/id}} is ready." }
-          : type === "list_filter"
-            ? { source: "/items", item_pointer: "/status", operator: "eq", value: "open" }
-          : type === "json_parse"
-            ? { source: "/text" }
-          : type === "tool"
-            ? { tool_key: "text.replace" }
-            : type === "mcp_tool"
-              ? { server_id: mcpOptions.find((option) => option.runnable_tools.length)?.id || "", tool_name: mcpOptions.find((option) => option.runnable_tools.length)?.runnable_tools[0] || "" }
-            : type === "result"
-              ? { value: { kind: "output", node_id: "input", pointer: "" } }
-              : {};
+        : type === "wait"
+          ? { seconds: 60 }
+          : type === "condition"
+            ? {
+                operator: "eq",
+                left: { kind: "literal", value: true },
+                right: { kind: "literal", value: true },
+              }
+            : type === "agent"
+              ? { version_id: "" }
+              : type === "subworkflow"
+                ? { version_id: "" }
+                : type === "for_each"
+                  ? {
+                      version_id: "",
+                      source: "/items",
+                      max_items: 3,
+                      input_mode: "envelope",
+                    }
+                  : type === "transform"
+                    ? {
+                        fields: { message: { kind: "literal", value: "" } },
+                        output_schema: {
+                          type: "object",
+                          properties: { message: { type: "string" } },
+                        },
+                      }
+                    : type === "merge"
+                      ? { mode: "active" }
+                      : type === "text_template"
+                        ? { template: "Ticket {{/ticket/id}} is ready." }
+                        : type === "list_filter"
+                          ? {
+                              source: "/items",
+                              item_pointer: "/status",
+                              operator: "eq",
+                              value: "open",
+                            }
+                          : type === "json_parse"
+                            ? { source: "/text" }
+                            : type === "tool"
+                              ? { tool_key: "text.replace" }
+                              : type === "http_tool"
+                                ? {
+                                    tool_id:
+                                      httpOptions.find(
+                                        (option) => option.state === "active",
+                                      )?.id || "",
+                                  }
+                                : type === "mcp_tool"
+                                  ? {
+                                      server_id:
+                                        mcpOptions.find(
+                                          (option) =>
+                                            option.runnable_tools.length,
+                                        )?.id || "",
+                                      tool_name:
+                                        mcpOptions.find(
+                                          (option) =>
+                                            option.runnable_tools.length,
+                                        )?.runnable_tools[0] || "",
+                                    }
+                                  : type === "result"
+                                    ? {
+                                        value: {
+                                          kind: "output",
+                                          node_id: "input",
+                                          pointer: "",
+                                        },
+                                      }
+                                    : {};
     const definition: GraphNode = {
       id,
       type,
       label: kind.name,
       config,
       position: {
-        x: source ? next ? (source.position.x + next.position.x) / 2 : source.position.x + 280 : 240 + (nodes.length % 3) * 100,
-        y: source ? next ? (source.position.y + next.position.y) / 2 + 80 : source.position.y + 120 : 100 + nodes.length * 60,
+        x: source
+          ? next
+            ? (source.position.x + next.position.x) / 2
+            : source.position.x + 280
+          : 240 + (nodes.length % 3) * 100,
+        y: source
+          ? next
+            ? (source.position.y + next.position.y) / 2 + 80
+            : source.position.y + 120
+          : 100 + nodes.length * 60,
       },
       join: "all",
       policy: { timeout_seconds: 60, max_attempts: 1 },
     };
     setNodes((n) => [
-      ...n.map((existing) => next?.id === existing.id && existing.data.definition.type === "result"
-        ? { ...existing, data: { definition: { ...existing.data.definition, config: type === "condition" || edges.filter((edge) => edge.target === next?.id).length > 1 ? {} : { value: { kind: "output", node_id: id, pointer: "" } } } } }
-        : existing),
+      ...n.map((existing) =>
+        next?.id === existing.id && existing.data.definition.type === "result"
+          ? {
+              ...existing,
+              data: {
+                definition: {
+                  ...existing.data.definition,
+                  config:
+                    type === "condition" ||
+                    edges.filter((edge) => edge.target === next?.id).length > 1
+                      ? {}
+                      : { value: { kind: "output", node_id: id, pointer: "" } },
+                },
+              },
+            }
+          : existing,
+      ),
       {
         id,
         type: "flowforge",
@@ -427,22 +780,44 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
       if (outgoing.length === 1 && next) {
         if (type === "condition") {
           setEdges((current) => [
-            ...current.map((edge) => edge.id === outgoing[0].id ? { ...edge, target: id } : edge),
+            ...current.map((edge) =>
+              edge.id === outgoing[0].id ? { ...edge, target: id } : edge,
+            ),
             ...(["true", "false"] as const).map((branch) => ({
-              id: `edge-${crypto.randomUUID()}`, source: id, target: next.id,
-              sourceHandle: branch, targetHandle: "in", type: "smoothstep" as const,
+              id: `edge-${crypto.randomUUID()}`,
+              source: id,
+              target: next.id,
+              sourceHandle: branch,
+              targetHandle: "in",
+              type: "smoothstep" as const,
               data: { mappings: [] },
             })),
           ]);
         } else {
-          setEdges((current) => connectInsertedNode(current, source.id, id, outgoing[0], `edge-${crypto.randomUUID()}`));
+          setEdges((current) =>
+            connectInsertedNode(
+              current,
+              source.id,
+              id,
+              outgoing[0],
+              `edge-${crypto.randomUUID()}`,
+            ),
+          );
         }
       } else if (outgoing.length === 0) {
-        setEdges((current) => [...current, {
-          id: `edge-${crypto.randomUUID()}`, source: source.id, target: id,
-          sourceHandle: source.data.definition.type === "condition" ? branchPort : "out",
-          targetHandle: "in", type: "smoothstep", data: { mappings: [] },
-        }]);
+        setEdges((current) => [
+          ...current,
+          {
+            id: `edge-${crypto.randomUUID()}`,
+            source: source.id,
+            target: id,
+            sourceHandle:
+              source.data.definition.type === "condition" ? branchPort : "out",
+            targetHandle: "in",
+            type: "smoothstep",
+            data: { mappings: [] },
+          },
+        ]);
       }
     }
     setSelected(id);
@@ -462,7 +837,6 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
           es,
         ),
       );
-      setValidation(null);
     },
     [setEdges],
   );
@@ -474,7 +848,6 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
           : n,
       ),
     );
-    setValidation(null);
   }
   function removeNode() {
     if (!selected) return;
@@ -492,7 +865,6 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
     setEdges(canvasEdges(previous));
     setHistory((h) => h.slice(0, -1));
     setSelected(null);
-    setValidation(null);
   }
   async function save(): Promise<Workflow | null> {
     setBusy(true);
@@ -700,6 +1072,15 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
           </div>
         </div>
         <div className="builder-actions">
+          <SaveTemplate
+            workspaceId={workflow.workspace_id}
+            sourceId={workflow.id}
+            kind="workflow"
+            revision={revision}
+            name={name}
+            description={workflow.description}
+            disabled={busy || dirty}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -731,7 +1112,18 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
             <ShieldCheck size={15} />
             {dirty ? "Save & validate" : "Validate"}
           </Button>
-          <Button variant="outline" size="sm" onClick={preview} disabled={busy || nodes.some((node) => node.data.definition.type === "agent")} title={nodes.some((node) => node.data.definition.type === "agent") ? "Agent steps require a published workflow run. Publish and use Run." : "Preview local steps without creating a run."}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={preview}
+            disabled={busy || blockingErrors > 0 || needsPublishedRun}
+            title={
+              blockedTitle ||
+              (needsPublishedRun
+                ? "External steps require a published workflow run. Publish and use Run."
+                : "Preview local steps without creating a run.")
+            }
+          >
             <Play size={14} />
             Preview
           </Button>
@@ -739,8 +1131,11 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
             variant="outline"
             size="sm"
             onClick={publish}
-            disabled={busy}
-            title="Publish a validated linear workflow with approved local tools and up to one agent."
+            disabled={busy || blockingErrors > 0}
+            title={
+              blockedTitle ||
+              "Publish a validated workflow with up to 30 steps and four agent nodes."
+            }
           >
             <LockKeyhole size={13} />
             Publish
@@ -774,7 +1169,10 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
             </button>
           </div>
           <p className="muted">The building blocks of your flow.</p>
-          <p className="palette-guidance">Select a step, then add a node to insert it into the path. Save, validate and preview when ready.</p>
+          <p className="palette-guidance">
+            Select a step, then add a node to insert it into the path. Save,
+            validate and preview when ready.
+          </p>
           <div className="search-input">
             <Search size={15} />
             <input
@@ -799,9 +1197,17 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                   <button
                     key={k.type}
                     className="palette-node"
-                    disabled={!k.enabled || ((k.type === "manual_input" || k.type === "result") && nodes.some((n) => n.data.definition.type === k.type))}
+                    disabled={
+                      !k.enabled ||
+                      ((k.type === "manual_input" || k.type === "result") &&
+                        nodes.some((n) => n.data.definition.type === k.type))
+                    }
                     onClick={() => addNode(k.type)}
-                    title={k.enabled ? `Add ${k.name}${selected ? " after the selected step" : ""}` : k.description}
+                    title={
+                      k.enabled
+                        ? `Add ${k.name}${selected ? " after the selected step" : ""}`
+                        : k.description
+                    }
                   >
                     <span className={`node-icon ${k.tone}`}>
                       <k.icon size={18} />
@@ -878,6 +1284,22 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                         {n.data.definition.type} ·{" "}
                         {edges.filter((e) => e.source === n.id).length} outgoing
                         connections
+                        {nodeIssues[n.id]?.some(
+                          (issue) => issue.severity === "error",
+                        ) && (
+                          <>
+                            {" "}
+                            ·{" "}
+                            <span className="field-error">
+                              {
+                                nodeIssues[n.id].filter(
+                                  (issue) => issue.severity === "error",
+                                ).length
+                              }{" "}
+                              to fix
+                            </span>
+                          </>
+                        )}
                       </span>
                     </div>
                     <ChevronRight size={16} />
@@ -885,53 +1307,61 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                 ))}
               </div>
             ) : (
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={nodeTypes}
-                onNodesChange={(changes) => {
-                  if (changes.some((c) => c.type === "remove")) remember();
-                  onNodesChange(changes);
+              <IssuesContext.Provider
+                value={{
+                  issues: nodeIssues,
+                  checked: validation !== null,
+                  toolNames,
                 }}
-                onEdgesChange={(changes) => {
-                  if (changes.some((c) => c.type === "remove")) remember();
-                  onEdgesChange(changes);
-                }}
-                onNodeDragStart={remember}
-                onConnect={(connection) => {
-                  remember();
-                  connect(connection);
-                }}
-                onNodeClick={(_, node) => selectNode(node.id)}
-                onPaneClick={() => setSelected(null)}
-                onSelectionChange={({ nodes: selection }) => {
-                  if (selection.length === 1 && selection[0].id !== selected)
-                    selectNode(selection[0].id);
-                }}
-                fitView
-                fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
-                minZoom={0.25}
-                maxZoom={1.75}
-                defaultEdgeOptions={{
-                  style: { stroke: "#a3aec2", strokeWidth: 1.7 },
-                }}
-                deleteKeyCode={["Backspace", "Delete"]}
-                aria-label="Editable workflow canvas"
               >
-                <Background
-                  variant={BackgroundVariant.Dots}
-                  gap={20}
-                  size={1.2}
-                  color="#d4dbe8"
-                />
-                <Controls showInteractive={false} />
-                <MiniMap
-                  nodeColor="#d9d4ff"
-                  maskColor="rgba(246,248,252,0.7)"
-                  pannable
-                  zoomable
-                />
-              </ReactFlow>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={nodeTypes}
+                  onNodesChange={(changes) => {
+                    if (changes.some((c) => c.type === "remove")) remember();
+                    onNodesChange(changes);
+                  }}
+                  onEdgesChange={(changes) => {
+                    if (changes.some((c) => c.type === "remove")) remember();
+                    onEdgesChange(changes);
+                  }}
+                  onNodeDragStart={remember}
+                  onConnect={(connection) => {
+                    remember();
+                    connect(connection);
+                  }}
+                  onNodeClick={(_, node) => selectNode(node.id)}
+                  onPaneClick={() => setSelected(null)}
+                  onSelectionChange={({ nodes: selection }) => {
+                    if (selection.length === 1 && selection[0].id !== selected)
+                      selectNode(selection[0].id);
+                  }}
+                  fitView
+                  fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
+                  minZoom={0.25}
+                  maxZoom={1.75}
+                  defaultEdgeOptions={{
+                    style: { stroke: "#a3aec2", strokeWidth: 1.7 },
+                  }}
+                  deleteKeyCode={["Backspace", "Delete"]}
+                  aria-label="Editable workflow canvas"
+                >
+                  <Background
+                    variant={BackgroundVariant.Dots}
+                    gap={20}
+                    size={1.2}
+                    color="#d4dbe8"
+                  />
+                  <Controls showInteractive={false} />
+                  <MiniMap
+                    nodeColor="#d9d4ff"
+                    maskColor="rgba(246,248,252,0.7)"
+                    pannable
+                    zoomable
+                  />
+                </ReactFlow>
+              </IssuesContext.Provider>
             )}
           </div>
           <div className="canvas-bottom">
@@ -967,19 +1397,44 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                   <span>{activeKind.name}</span>
                 </div>
               </div>
-              <div className="inspector-tabs">
-                <button
-                  className={inspectorTab === "configuration" ? "active" : ""}
-                  onClick={() => setInspectorTab("configuration")}
-                >
-                  Configuration
-                </button>
-                <button
-                  className={inspectorTab === "policy" ? "active" : ""}
-                  onClick={() => setInspectorTab("policy")}
-                >
-                  Policies
-                </button>
+              <div className="inspector-tabs" role="tablist">
+                {(
+                  [
+                    ["configuration", "Configuration"],
+                    ["test", "Test"],
+                    ["advanced", "Advanced JSON"],
+                    ["policy", "Policies"],
+                  ] as const
+                ).map(([tab, title]) => (
+                  <button
+                    key={tab}
+                    role="tab"
+                    aria-selected={inspectorTab === tab}
+                    className={inspectorTab === tab ? "active" : ""}
+                    onClick={() => {
+                      if (tab === "advanced")
+                        setConfigText(
+                          JSON.stringify(
+                            active.data.definition.config,
+                            null,
+                            2,
+                          ),
+                        );
+                      setInspectorTab(tab);
+                    }}
+                  >
+                    {title}
+                    {tab === "configuration" &&
+                      activeIssues.some(
+                        (issue) => issue.severity === "error",
+                      ) && (
+                        <span
+                          className="tab-issue-dot"
+                          aria-label="has issues"
+                        />
+                      )}
+                  </button>
+                ))}
               </div>
               <div className="inspector-content">
                 {inspectorTab === "configuration" ? (
@@ -992,127 +1447,64 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                         onFocus={remember}
                         onChange={(e) => updateNode({ label: e.target.value })}
                       />
+                      {!active.data.definition.label.trim() && (
+                        <span className="field-error">
+                          Give this step a name so the draft can be saved.
+                        </span>
+                      )}
                     </label>
-                    <label>
-                      Join behavior
-                      <select
-                        value={active.data.definition.join}
-                        onChange={(e) => {
-                          remember();
-                          updateNode({
-                            join: e.target.value as "all" | "active",
-                          });
-                        }}
-                      >
-                        <option value="all">All paths must be active</option>
-                        <option value="active">Merge active paths</option>
-                      </select>
-                    </label>
-                    {active.data.definition.type === "agent" && (
-                      <div className="agent-node-picker">
+                    {graph.edges.filter((edge) => edge.target === active.id)
+                      .length > 1 &&
+                      active.data.definition.type !== "merge" &&
+                      active.data.definition.type !== "result" && (
                         <label>
-                          Published agent version
+                          Join behavior
                           <select
-                            value={String(active.data.definition.config.version_id || "")}
-                            onChange={(event) => {
+                            value={active.data.definition.join}
+                            onChange={(e) => {
                               remember();
-                              const config = { ...active.data.definition.config, version_id: event.target.value };
-                              updateNode({ config });
-                              setConfigText(JSON.stringify(config, null, 2));
+                              updateNode({
+                                join: e.target.value as "all" | "active",
+                              });
                             }}
                           >
-                            <option value="">Choose an agent version</option>
-                            {agentOptions.map((option) => (
-                              <option key={option.id} value={option.id}>{option.name} · v{option.number} · {option.provider}/{option.model_id}{option.tool_keys.length ? ` · ${option.tool_keys.length} tools` : ""}</option>
-                            ))}
+                            <option value="all">
+                              All paths must be active
+                            </option>
+                            <option value="active">Merge active paths</option>
                           </select>
                         </label>
-                        <p>Select an immutable published agent. Its provider key, input schema, tool approvals and budget are checked again at run time. Tool calls currently work with OpenAI GPT-5 Mini.</p>
-                        <Link href={`/w/${workflow.workspace_id}/agents/new`} className="text-link">{agentOptions.length ? "Create another agent" : "Create and publish an agent first"}</Link>
-                      </div>
-                    )}
-                    {active.data.definition.type === "mcp_tool" && (
-                      <div className="agent-node-picker">
-                        <label>
-                          Approved MCP tool
-                          <select
-                            value={`${String(active.data.definition.config.server_id || "")}:${String(active.data.definition.config.tool_name || "")}`}
-                            onChange={(event) => {
-                              const [server_id, tool_name] = event.target.value.split(":", 2);
-                              remember();
-                              const config = { server_id, tool_name };
-                              updateNode({ config });
-                              setConfigText(JSON.stringify(config, null, 2));
-                            }}
-                          >
-                            <option value=":">Choose a connected read-only tool</option>
-                            {mcpOptions.flatMap((server) => server.runnable_tools.map((tool) => (
-                              <option key={`${server.id}:${tool}`} value={`${server.id}:${tool}`}>{server.name} · {tool}</option>
-                            )))}
-                          </select>
-                        </label>
-                        <p>The workflow pins this connection generation and tool schema when published. Changes require a new workflow version.</p>
-                        {mcpOptions.find((server) => server.id === active.data.definition.config.server_id)?.runnable_schemas[String(active.data.definition.config.tool_name || "")] !== undefined && (
-                          <pre className="tool-output">{JSON.stringify(mcpOptions.find((server) => server.id === active.data.definition.config.server_id)?.runnable_schemas[String(active.data.definition.config.tool_name || "")], null, 2)}</pre>
-                        )}
-                        {!mcpOptions.some((server) => server.runnable_tools.length) && <Link href={`/w/${workflow.workspace_id}/integrations`} className="text-link">Connect an approved MCP service</Link>}
-                      </div>
-                    )}
-                    <label>
-                      Configuration JSON
-                      <textarea
-                        className="json-editor"
-                        spellCheck={false}
-                        rows={10}
-                        value={configText}
-                        onChange={(e) => setConfigText(e.target.value)}
+                      )}
+                    <div className="summary-divider" />
+                    {/* One undo entry per focused field, not per keystroke. */}
+                    <div onFocus={remember}>
+                      <NodeConfigForm
+                        key={active.id}
+                        node={active.data.definition}
+                        issues={activeIssues}
+                        context={formContext}
+                        onChange={(config) => updateNode({ config })}
                       />
-                    </label>
-                    {active.data.definition.type === "transform" && (
-                      <p className="text-muted-foreground text-xs">
-                        Each field accepts a literal value or an input JSON Pointer, for example
-                        {" "}<code>{'{"kind":"input","pointer":"/ticket/id"}'}</code>.
-                        The optional output schema checks the resulting object.
-                      </p>
-                    )}
-                    {active.data.definition.type === "condition" && (
-                      <p className="text-muted-foreground text-xs">
-                        Compare literal values or input pointers. Both true and false paths must reach Return result; the selected path appears in the run trace.
-                      </p>
-                    )}
-                    {active.data.definition.type === "text_template" && (
-                      <p className="text-muted-foreground text-xs">Use placeholders such as <code>{"{{/ticket/id}}"}</code>. This node returns an object with a <code>text</code> field.</p>
-                    )}
-                    {active.data.definition.type === "list_filter" && (
-                      <p className="text-muted-foreground text-xs">Select an array with <code>source</code>, compare each item with <code>item_pointer</code>, and receive <code>items</code> and <code>count</code>.</p>
-                    )}
-                    {active.data.definition.type === "json_parse" && (
-                      <p className="text-muted-foreground text-xs">Select a JSON string with <code>source</code>. The parsed data is returned in <code>value</code>.</p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        try {
-                          const value = JSON.parse(configText);
-                          if (
-                            !value ||
-                            typeof value !== "object" ||
-                            Array.isArray(value)
-                          )
-                            throw new Error();
-                          remember();
-                          updateNode({ config: value });
-                          setError("");
-                        } catch {
-                          setError(
-                            "Node configuration must be a valid JSON object.",
-                          );
-                        }
-                      }}
-                    >
-                      Apply configuration
-                    </Button>
+                    </div>
+                    <DataMappings
+                      incoming={graph.edges.filter(
+                        (edge) => edge.target === active.id,
+                      )}
+                      names={Object.fromEntries(
+                        graph.nodes.map((node) => [node.id, node.label]),
+                      )}
+                      issues={validation?.errors || []}
+                      remember={remember}
+                      onChange={(id, mappings) =>
+                        setEdges((current) =>
+                          current.map((edge) =>
+                            edge.id === id
+                              ? { ...edge, data: { ...edge.data, mappings } }
+                              : edge,
+                          ),
+                        )
+                      }
+                    />
                     <div className="summary-divider" />
                     <label>
                       Connect to
@@ -1172,6 +1564,107 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                       Add connection
                     </Button>
                   </>
+                ) : inspectorTab === "test" ? (
+                  <NodeTestPanel
+                    key={active.id}
+                    workspaceId={workflow.workspace_id}
+                    workflowId={workflow.id}
+                    graph={graph}
+                    node={active.data.definition}
+                    tests={tests}
+                    setTest={setTest}
+                    sampleInput={previewInput}
+                    blocked={
+                      ["approval", "wait"].includes(active.data.definition.type)
+                        ? "Publish and run this workflow to create a durable decision or timer. Open Workflow executions to review it."
+                        : testBlocked
+                          ? `Fix this step's settings first: ${testBlocked}`
+                          : active.data.definition.type === "http_tool" &&
+                              !httpOptions.find(
+                                (tool) => tool.id === activeConfig.tool_id,
+                              )?.read_only
+                            ? "Use a published workflow run to execute this action and retain its receipt."
+                            : ["subworkflow", "for_each"].includes(
+                                  active.data.definition.type,
+                                ) &&
+                                requiresPublishedRun(
+                                  [active.data.definition],
+                                  workflowOptions,
+                                )
+                              ? "Use a published run for nested external steps, decisions and timers so progress and recovery are retained."
+                              : null
+                    }
+                    externalTarget={externalTarget}
+                  />
+                ) : inspectorTab === "advanced" ? (
+                  <>
+                    <label>
+                      Configuration JSON
+                      <textarea
+                        className="json-editor"
+                        spellCheck={false}
+                        rows={14}
+                        value={configText}
+                        onChange={(e) => setConfigText(e.target.value)}
+                      />
+                    </label>
+                    <p className="node-form-hint">
+                      Applied JSON is checked against the same rules as the
+                      form. Issues below update after each change.
+                    </p>
+                    <div className="row">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          try {
+                            const value = JSON.parse(configText);
+                            if (
+                              !value ||
+                              typeof value !== "object" ||
+                              Array.isArray(value)
+                            )
+                              throw new Error();
+                            remember();
+                            updateNode({ config: value });
+                            setError("");
+                          } catch {
+                            setError(
+                              "Node configuration must be a valid JSON object.",
+                            );
+                          }
+                        }}
+                      >
+                        Apply configuration
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setConfigText(
+                            JSON.stringify(
+                              active.data.definition.config,
+                              null,
+                              2,
+                            ),
+                          )
+                        }
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                    {activeIssues.length > 0 && (
+                      <ul className="node-field-issues">
+                        {activeIssues.map((issue, index) => (
+                          <li key={index} className={issue.severity}>
+                            <AlertCircle size={11} />
+                            {issue.path && <code>{issue.path}</code>}
+                            {issue.message}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 ) : (
                   <>
                     <label>
@@ -1198,7 +1691,19 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                       <input
                         type="number"
                         min={1}
-                        max={3}
+                        max={
+                          [
+                            "agent",
+                            "mcp_tool",
+                            "http_tool",
+                            "subworkflow",
+                            "for_each",
+                            "approval",
+                            "wait",
+                          ].includes(active.data.definition.type)
+                            ? 1
+                            : 3
+                        }
                         value={String(
                           active.data.definition.policy.max_attempts || 1,
                         )}
@@ -1215,9 +1720,12 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                     <div className="permission-callout">
                       <ShieldCheck size={18} />
                       <p>
-                        Retries will be allowed only for operations classified
-                        as safe. Unknown external outcomes will not be replayed
-                        automatically.
+                        Local steps retry only temporary availability errors or
+                        timeouts. Input and contract failures stop immediately.
+                        External steps, workflow calls and loops use one
+                        attempt. Completed child receipts are reused during safe
+                        recovery; replay starts a new run and can repeat
+                        external actions.
                       </p>
                     </div>
                   </>
@@ -1253,19 +1761,37 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
               </div>
               <div className="summary-line">
                 <span>Execution timeout</span>
-                <strong>{String(graph.limits.timeout_seconds)}s</strong>
+                <strong>
+                  {Math.min(
+                    Number(graph.limits.timeout_seconds || 60),
+                    needsPublishedRun ? 30 : 15,
+                  )}
+                  s effective
+                </strong>
               </div>
               <div className="summary-line">
                 <span>Budget cap</span>
                 <strong>${String(graph.limits.max_cost_usd)}</strong>
               </div>
+              <div className="summary-line">
+                <span>Worst-case expanded steps</span>
+                <strong>{validation?.expanded_steps ?? "—"} / 120</strong>
+              </div>
+              <div className="summary-line">
+                <span>Worst-case agent calls</span>
+                <strong>{validation?.agent_steps ?? "—"} / 8</strong>
+              </div>
               <div className="permission-callout">
                 <ShieldCheck size={17} />
                 <p>
-                  Published runs support a single path with approved local tools
-                  and one published agent with approved local tools. One condition can
-                  route two paths that rejoin at the result. Data nodes reshape,
-                  filter, parse, and compose values. Reviewed read-only MCP tools can run after an admin connects them.
+                  Published workflows support up to 30 steps and four agent
+                  nodes, nested conditions, fan-out and merge paths. Loops call
+                  a published workflow for up to 20 items, with at most three
+                  workflow levels and 120 expanded steps. Steps execute in a
+                  deterministic sequence within one shared workflow budget and
+                  deadline. Multiple active inputs are grouped by source step
+                  ID. Select a step to map incoming fields. Reviewed read-only
+                  MCP tools require an admin connection.
                 </p>
               </div>
             </div>
@@ -1285,7 +1811,12 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                   {validation.errors.length} errors
                 </Badge>
               )}
-              <span className="muted">Structure and tool approval</span>
+              <span className="muted">
+                {validation?.revision
+                  ? `Saved revision ${validation.revision}`
+                  : "Live check of this draft"}{" "}
+                · structure, configuration and tool approval
+              </span>
             </div>
             <button
               className="icon-button"
@@ -1296,17 +1827,27 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
             </button>
           </div>
           <div className="validation-content">
+            {checkError && (
+              <span className="validation-empty">
+                <AlertCircle size={17} />
+                Live check paused: {checkError}
+              </span>
+            )}
             {!validation ? (
               <span className="validation-empty">
                 <ShieldCheck size={17} />
-                Validate your saved graph to find missing connections, loops and
-                unavailable dependencies.
+                Checking this draft for missing settings, connections, loops and
+                unavailable dependencies…
               </span>
             ) : validation.valid ? (
               <span className="validation-success">
                 <Check size={18} />
-                Structural checks passed for revision {validation.revision}.
-                Published runs support linear paths with approved local tools.
+                {validation.revision
+                  ? `All checks passed for revision ${validation.revision}.`
+                  : "All checks passed for this draft."}
+                {validation.publishable
+                  ? " Ready to preview and publish."
+                  : " Review the reported configuration, dependency and expanded-work limits before publishing."}
               </span>
             ) : (
               validation.errors.map((e, i) => (
@@ -1322,20 +1863,42 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                   <span>{e.message}</span>
                   {e.node_id && (
                     <span className="error-node">
-                      {e.node_id}
+                      {nodes.find((n) => n.id === e.node_id)?.data.definition
+                        .label ?? e.node_id}
                       <ChevronRight size={12} />
                     </span>
                   )}
                 </button>
               ))
             )}
+            {validation &&
+              validation.warnings.map((e, i) => (
+                <button
+                  className="validation-error-row warning"
+                  key={i}
+                  onClick={() => {
+                    if (e.node_id) selectNode(e.node_id);
+                  }}
+                >
+                  <AlertCircle size={15} />
+                  <code>{e.code}</code>
+                  <span>{e.message}</span>
+                  {e.node_id && (
+                    <span className="error-node">
+                      {nodes.find((n) => n.id === e.node_id)?.data.definition
+                        .label ?? e.node_id}
+                      <ChevronRight size={12} />
+                    </span>
+                  )}
+                </button>
+              ))}
           </div>
           <div className="workflow-preview-panel">
             <div>
               <strong>Draft preview</strong>
               <small>
-                Runs locally approved tools against this saved draft. Agent steps
-                require publishing and a durable run.
+                Runs locally approved tools against this saved draft. Agent
+                steps require publishing and a durable run.
               </small>
             </div>
             <label htmlFor="workflow-preview-input">Input JSON</label>
@@ -1373,11 +1936,28 @@ export function WorkflowBuilder({ workflow, agentOptions, mcpOptions, initialPub
                     Run {durableRun.id}: <strong>{durableRun.state}</strong>
                     {durableRun.error_code && ` · ${durableRun.error_code}`}
                   </p>
+                  <Link
+                    className="text-link"
+                    href={`/w/${workflow.workspace_id}/executions?kind=workflows&runId=${durableRun.id}`}
+                  >
+                    Open durable step debugger
+                  </Link>
                   {durableRun.output !== null && (
                     <pre>{JSON.stringify(durableRun.output, null, 2)}</pre>
                   )}
-                  {durableRun.cost_usd && <small>Estimated model cost ${durableRun.cost_usd} · {durableRun.input_tokens} input / {durableRun.output_tokens} output tokens</small>}
-                  {durableRun.uncertain_cost_usd && <small>Provider outcome uncertain; possible charge up to ${durableRun.uncertain_cost_usd}.</small>}
+                  {durableRun.cost_usd && (
+                    <small>
+                      Estimated model cost ${durableRun.cost_usd} ·{" "}
+                      {durableRun.input_tokens} input /{" "}
+                      {durableRun.output_tokens} output tokens
+                    </small>
+                  )}
+                  {durableRun.uncertain_cost_usd && (
+                    <small>
+                      Provider outcome uncertain; possible charge up to $
+                      {durableRun.uncertain_cost_usd}.
+                    </small>
+                  )}
                   {durableRun.steps && (
                     <small>
                       {durableRun.steps

@@ -1,9 +1,88 @@
 {
   "components": {
     "schemas": {
+      "ActivityPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ActivityPage",
+        "type": "object"
+      },
+      "ActivityRead": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_id": {
+            "format": "uuid",
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actor_id",
+          "action",
+          "target_id",
+          "details",
+          "created_at"
+        ],
+        "title": "ActivityRead",
+        "type": "object"
+      },
       "AgentConfig-Input": {
         "additionalProperties": false,
         "properties": {
+          "http_tools": {
+            "items": {
+              "$ref": "#/components/schemas/HttpGrant"
+            },
+            "maxItems": 8,
+            "title": "Http Tools",
+            "type": "array"
+          },
           "input_schema": {
             "additionalProperties": true,
             "title": "Input Schema",
@@ -17,6 +96,14 @@
           },
           "limits": {
             "$ref": "#/components/schemas/Limits-Input"
+          },
+          "mcp_tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpGrant"
+            },
+            "maxItems": 8,
+            "title": "Mcp Tools",
+            "type": "array"
           },
           "model_id": {
             "default": "",
@@ -67,6 +154,14 @@
       "AgentConfig-Output": {
         "additionalProperties": false,
         "properties": {
+          "http_tools": {
+            "items": {
+              "$ref": "#/components/schemas/HttpGrant"
+            },
+            "maxItems": 8,
+            "title": "Http Tools",
+            "type": "array"
+          },
           "input_schema": {
             "additionalProperties": true,
             "title": "Input Schema",
@@ -80,6 +175,14 @@
           },
           "limits": {
             "$ref": "#/components/schemas/Limits-Output"
+          },
+          "mcp_tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpGrant"
+            },
+            "maxItems": 8,
+            "title": "Mcp Tools",
+            "type": "array"
           },
           "model_id": {
             "default": "",
@@ -132,7 +235,9 @@
           "tool_keys",
           "input_schema",
           "output_schema",
-          "limits"
+          "limits",
+          "mcp_tools",
+          "http_tools"
         ],
         "title": "AgentConfig",
         "type": "object"
@@ -236,6 +341,376 @@
           "expected_revision"
         ],
         "title": "AgentUpdate",
+        "type": "object"
+      },
+      "ApprovalDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ApprovalDecision",
+        "type": "object"
+      },
+      "AutomationCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "maximum": 86400.0,
+                "minimum": 60.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "kind": {
+            "enum": [
+              "webhook",
+              "schedule"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "version_id"
+        ],
+        "title": "AutomationCreate",
+        "type": "object"
+      },
+      "AutomationList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AutomationRead"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AutomationList",
+        "type": "object"
+      },
+      "AutomationRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "kind": {
+            "enum": [
+              "webhook",
+              "schedule"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Due At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "next_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "paused",
+              "archived"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version_id",
+          "kind",
+          "state",
+          "interval_seconds",
+          "next_due_at",
+          "next_attempt_at",
+          "last_due_at",
+          "last_error_code",
+          "created_at"
+        ],
+        "title": "AutomationRead",
+        "type": "object"
+      },
+      "AutomationSecret": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "kind": {
+            "enum": [
+              "webhook",
+              "schedule"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Due At"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "next_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due At"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "paused",
+              "archived"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          },
+          "webhook_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook Key"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version_id",
+          "kind",
+          "state",
+          "interval_seconds",
+          "next_due_at",
+          "next_attempt_at",
+          "last_due_at",
+          "last_error_code",
+          "created_at",
+          "webhook_key"
+        ],
+        "title": "AutomationSecret",
+        "type": "object"
+      },
+      "CaseResult": {
+        "properties": {
+          "contract_valid": {
+            "title": "Contract Valid",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "untested",
+              "contract_failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "run_id",
+          "contract_valid"
+        ],
+        "title": "CaseResult",
         "type": "object"
       },
       "ConnectionList": {
@@ -405,6 +880,19 @@
         "title": "DeploymentCreate",
         "type": "object"
       },
+      "DraftCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/Graph"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "DraftCheck",
+        "type": "object"
+      },
       "Edge": {
         "additionalProperties": false,
         "properties": {
@@ -455,6 +943,55 @@
         "title": "Edge",
         "type": "object"
       },
+      "EligibleTrigger": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "webhook",
+              "schedule"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "name",
+          "number",
+          "kind"
+        ],
+        "title": "EligibleTrigger",
+        "type": "object"
+      },
+      "EligibleTriggers": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EligibleTrigger"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EligibleTriggers",
+        "type": "object"
+      },
       "EmailRequest": {
         "additionalProperties": false,
         "properties": {
@@ -468,6 +1005,90 @@
           "email"
         ],
         "title": "EmailRequest",
+        "type": "object"
+      },
+      "EvaluationCase": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_output": {
+            "additionalProperties": true,
+            "title": "Expected Output",
+            "type": "object"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "input",
+          "expected_output"
+        ],
+        "title": "EvaluationCase",
+        "type": "object"
+      },
+      "EvaluationResult": {
+        "properties": {
+          "history_limit": {
+            "const": 100,
+            "default": 100,
+            "title": "History Limit",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CaseResult"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "model_called": {
+            "const": false,
+            "default": false,
+            "title": "Model Called",
+            "type": "boolean"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "scope": {
+            "const": "observed_exact_output",
+            "default": "observed_exact_output",
+            "title": "Scope",
+            "type": "string"
+          },
+          "suite_id": {
+            "format": "uuid",
+            "title": "Suite Id",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "suite_id",
+          "items",
+          "passed",
+          "total"
+        ],
+        "title": "EvaluationResult",
         "type": "object"
       },
       "ExampleError": {
@@ -624,6 +1245,334 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HttpCredentialUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "expected_generation": {
+            "minimum": 1.0,
+            "title": "Expected Generation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_generation"
+        ],
+        "title": "HttpCredentialUpdate",
+        "type": "object"
+      },
+      "HttpGeneration": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_generation": {
+            "minimum": 1.0,
+            "title": "Expected Generation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_generation"
+        ],
+        "title": "HttpGeneration",
+        "type": "object"
+      },
+      "HttpGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_generation": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Generation"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "spec_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spec Hash"
+          },
+          "tool_id": {
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id"
+        ],
+        "title": "HttpGrant",
+        "type": "object"
+      },
+      "HttpToolCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_header": {
+            "default": "X-API-Key",
+            "maxLength": 64,
+            "title": "Auth Header",
+            "type": "string"
+          },
+          "auth_mode": {
+            "default": "none",
+            "enum": [
+              "none",
+              "bearer",
+              "api_key"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "confirm_permissions": {
+            "default": false,
+            "title": "Confirm Permissions",
+            "type": "boolean"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "method": {
+            "default": "GET",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "title": "Output Schema",
+            "type": "object"
+          },
+          "read_only": {
+            "default": false,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "HttpToolCreate",
+        "type": "object"
+      },
+      "HttpToolList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HttpToolRead"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "HttpToolList",
+        "type": "object"
+      },
+      "HttpToolRead": {
+        "properties": {
+          "auth_header": {
+            "title": "Auth Header",
+            "type": "string"
+          },
+          "auth_mode": {
+            "enum": [
+              "none",
+              "bearer",
+              "api_key"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "credential_present": {
+            "title": "Credential Present",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "method": {
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "title": "Output Schema",
+            "type": "object"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "spec_hash": {
+            "title": "Spec Hash",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "url",
+          "method",
+          "read_only",
+          "auth_mode",
+          "auth_header",
+          "credential_present",
+          "input_schema",
+          "output_schema",
+          "spec_hash",
+          "generation",
+          "state",
+          "created_at"
+        ],
+        "title": "HttpToolRead",
+        "type": "object"
+      },
+      "HttpToolTest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_external": {
+            "default": false,
+            "title": "Confirm External",
+            "type": "boolean"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "title": "HttpToolTest",
         "type": "object"
       },
       "InvitationAccept": {
@@ -808,6 +1757,62 @@
         "title": "McpCredential",
         "type": "object"
       },
+      "McpGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "connection_generation": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Generation"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "input_schema_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Schema Hash"
+          },
+          "server_id": {
+            "pattern": "^[a-z][a-z0-9_-]{0,39}$",
+            "title": "Server Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "pattern": "^[a-zA-Z0-9_.-]{1,80}$",
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_id",
+          "tool_name"
+        ],
+        "title": "McpGrant",
+        "type": "object"
+      },
       "McpToolInput": {
         "additionalProperties": false,
         "properties": {
@@ -923,7 +1928,13 @@
               "agent",
               "tool",
               "mcp_tool",
+              "http_tool",
+              "subworkflow",
+              "for_each",
+              "approval",
+              "wait",
               "condition",
+              "merge",
               "transform",
               "text_template",
               "list_filter",
@@ -941,6 +1952,33 @@
           "position"
         ],
         "title": "Node",
+        "type": "object"
+      },
+      "NodeTest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_external": {
+            "default": false,
+            "title": "Confirm External",
+            "type": "boolean"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/Graph"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "maxProperties": 100,
+            "title": "Outputs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "graph"
+        ],
+        "title": "NodeTest",
         "type": "object"
       },
       "PasswordChange": {
@@ -1143,6 +2181,18 @@
           "workspace_name"
         ],
         "title": "Register",
+        "type": "object"
+      },
+      "ReplayInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_external": {
+            "default": false,
+            "title": "Confirm External",
+            "type": "boolean"
+          }
+        },
+        "title": "ReplayInput",
         "type": "object"
       },
       "RestoreRequest": {
@@ -1480,6 +2530,25 @@
         "title": "RunRead",
         "type": "object"
       },
+      "SharingUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "visibility": {
+            "enum": [
+              "private",
+              "workspace",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visibility"
+        ],
+        "title": "SharingUpdate",
+        "type": "object"
+      },
       "SnapshotCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1499,6 +2568,222 @@
           "expected_revision"
         ],
         "title": "SnapshotCreate",
+        "type": "object"
+      },
+      "StateUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "StateUpdate",
+        "type": "object"
+      },
+      "SuiteCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationCase"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Cases",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cases"
+        ],
+        "title": "SuiteCreate",
+        "type": "object"
+      },
+      "SuiteEvaluate": {
+        "additionalProperties": false,
+        "properties": {
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id"
+        ],
+        "title": "SuiteEvaluate",
+        "type": "object"
+      },
+      "SuiteList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuitePublic"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SuiteList",
+        "type": "object"
+      },
+      "SuitePublic": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "title": "SuitePublic",
+        "type": "object"
+      },
+      "TemplateCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "default": "Community",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "private",
+            "enum": [
+              "private",
+              "workspace",
+              "public"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "source_id",
+          "expected_revision",
+          "name"
+        ],
+        "title": "TemplateCreate",
+        "type": "object"
+      },
+      "TemplatePackage": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "default": "Imported",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "definition": {
+            "additionalProperties": true,
+            "title": "Definition",
+            "type": "object"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "format": {
+            "const": "flowforge-template",
+            "default": "flowforge-template",
+            "title": "Format",
+            "type": "string"
+          },
+          "format_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "workflow"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "definition"
+        ],
+        "title": "TemplatePackage",
         "type": "object"
       },
       "TokenRequest": {
@@ -1541,6 +2826,126 @@
           "output"
         ],
         "title": "ToolResult",
+        "type": "object"
+      },
+      "UsageLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "active_run_limit": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Active Run Limit",
+            "type": "integer"
+          },
+          "daily_budget_usd": {
+            "pattern": "^(0|[1-9][0-9]{0,4})(\\.[0-9]{1,8})?$",
+            "title": "Daily Budget Usd",
+            "type": "string"
+          },
+          "daily_run_limit": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Daily Run Limit",
+            "type": "integer"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "daily_budget_usd",
+          "daily_run_limit",
+          "active_run_limit"
+        ],
+        "title": "UsageLimits",
+        "type": "object"
+      },
+      "UsageRead": {
+        "properties": {
+          "accepted_runs": {
+            "title": "Accepted Runs",
+            "type": "integer"
+          },
+          "active_run_limit": {
+            "title": "Active Run Limit",
+            "type": "integer"
+          },
+          "active_runs": {
+            "title": "Active Runs",
+            "type": "integer"
+          },
+          "committed_usd": {
+            "title": "Committed Usd",
+            "type": "string"
+          },
+          "daily_budget_usd": {
+            "title": "Daily Budget Usd",
+            "type": "string"
+          },
+          "daily_run_limit": {
+            "title": "Daily Run Limit",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "measured_usd": {
+            "title": "Measured Usd",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "remaining_usd": {
+            "title": "Remaining Usd",
+            "type": "string"
+          },
+          "reserved_usd": {
+            "title": "Reserved Usd",
+            "type": "string"
+          },
+          "resets_at": {
+            "format": "date-time",
+            "title": "Resets At",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "uncertain_usd": {
+            "title": "Uncertain Usd",
+            "type": "string"
+          },
+          "window_start": {
+            "format": "date-time",
+            "title": "Window Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_start",
+          "resets_at",
+          "daily_budget_usd",
+          "daily_run_limit",
+          "active_run_limit",
+          "revision",
+          "accepted_runs",
+          "active_runs",
+          "measured_usd",
+          "uncertain_usd",
+          "reserved_usd",
+          "committed_usd",
+          "remaining_usd",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "UsageRead",
         "type": "object"
       },
       "ValidateRequest": {
@@ -1737,6 +3142,90 @@
         "title": "VersionRead",
         "type": "object"
       },
+      "WorkflowCallOption": {
+        "properties": {
+          "agent_steps": {
+            "title": "Agent Steps",
+            "type": "integer"
+          },
+          "expanded_steps": {
+            "title": "Expanded Steps",
+            "type": "integer"
+          },
+          "has_external": {
+            "title": "Has External",
+            "type": "boolean"
+          },
+          "has_pause": {
+            "title": "Has Pause",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "limits": {
+            "additionalProperties": true,
+            "title": "Limits",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "title": "Output Schema",
+            "type": "object"
+          },
+          "workflow_id": {
+            "format": "uuid",
+            "title": "Workflow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workflow_id",
+          "name",
+          "number",
+          "input_schema",
+          "output_schema",
+          "expanded_steps",
+          "agent_steps",
+          "has_external",
+          "has_pause",
+          "limits"
+        ],
+        "title": "WorkflowCallOption",
+        "type": "object"
+      },
+      "WorkflowCallOptions": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowCallOption"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WorkflowCallOptions",
+        "type": "object"
+      },
       "WorkflowCreate": {
         "additionalProperties": false,
         "properties": {
@@ -1757,6 +3246,634 @@
           "name"
         ],
         "title": "WorkflowCreate",
+        "type": "object"
+      },
+      "WorkflowPauseRead": {
+        "properties": {
+          "allow_requester": {
+            "title": "Allow Requester",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "approval",
+              "wait"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "settled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settled At"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "elapsed",
+              "expired",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "node_id",
+          "kind",
+          "state",
+          "prompt",
+          "allow_requester",
+          "created_at",
+          "due_at",
+          "decided_by",
+          "settled_at"
+        ],
+        "title": "WorkflowPauseRead",
+        "type": "object"
+      },
+      "WorkflowRunList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowRunRead"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "WorkflowRunList",
+        "type": "object"
+      },
+      "WorkflowRunRead": {
+        "properties": {
+          "automation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Automation Id"
+          },
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "pauses": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowPauseRead"
+            },
+            "title": "Pauses",
+            "type": "array"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "reserved_max_usd": {
+            "title": "Reserved Max Usd",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "waiting",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkflowStepRead"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "uncertain_cost_usd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertain Cost Usd"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "version_id",
+          "automation_id",
+          "deployment_id",
+          "state",
+          "requested_by",
+          "output",
+          "steps",
+          "error_code",
+          "reserved_max_usd",
+          "cost_usd",
+          "uncertain_cost_usd",
+          "input_tokens",
+          "output_tokens",
+          "cancel_requested",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "WorkflowRunRead",
+        "type": "object"
+      },
+      "WorkflowStepDetail": {
+        "properties": {
+          "attempt": {
+            "default": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "definition_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition Node Id"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "iteration_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iteration Index"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "scope": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope",
+            "type": "array"
+          },
+          "selected_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Port"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "waiting",
+              "completed",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "workflow_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version Id"
+          }
+        },
+        "required": [
+          "node_id",
+          "type",
+          "status",
+          "output",
+          "input"
+        ],
+        "title": "WorkflowStepDetail",
+        "type": "object"
+      },
+      "WorkflowStepRead": {
+        "properties": {
+          "attempt": {
+            "default": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "definition_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition Node Id"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "iteration_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iteration Index"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "scope": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scope",
+            "type": "array"
+          },
+          "selected_port": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Port"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "waiting",
+              "completed",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "workflow_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Version Id"
+          }
+        },
+        "required": [
+          "node_id",
+          "type",
+          "status",
+          "output"
+        ],
+        "title": "WorkflowStepRead",
         "type": "object"
       },
       "WorkflowUpdate": {
@@ -2294,6 +4411,250 @@
         ]
       }
     },
+    "/api/v1/templates/{template_key}": {
+      "get": {
+        "operationId": "template_detail_api_v1_templates__template_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Template Detail",
+        "tags": [
+          "templates"
+        ]
+      },
+      "patch": {
+        "operationId": "update_sharing_api_v1_templates__template_key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharingUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Sharing",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/templates/{template_key}/export": {
+      "get": {
+        "operationId": "export_template_api_v1_templates__template_key__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatePackage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{automation_id}": {
+      "post": {
+        "operationId": "delivery_api_v1_webhooks__automation_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delivery",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{automation_id}/runs/{run_id}": {
+      "get": {
+        "operationId": "status_api_v1_webhooks__automation_id__runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
     "/api/v1/workspaces": {
       "post": {
         "operationId": "create_workspace_api_v1_workspaces_post",
@@ -2463,6 +4824,96 @@
         "summary": "Rename Workspace",
         "tags": [
           "workspaces"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/activity": {
+      "get": {
+        "operationId": "listing_api_v1_workspaces__workspace_id__activity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "pattern": "^[a-z][a-z0-9_.]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "activity"
         ]
       }
     },
@@ -2773,6 +5224,193 @@
         "summary": "Archive",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/evaluations": {
+      "get": {
+        "operationId": "listing_api_v1_workspaces__workspace_id__agents__agent_id__evaluations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuiteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "agent-evaluations"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_workspaces__workspace_id__agents__agent_id__evaluations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuiteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuitePublic"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "agent-evaluations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/evaluations/{suite_id}/evaluate": {
+      "post": {
+        "operationId": "evaluate_api_v1_workspaces__workspace_id__agents__agent_id__evaluations__suite_id__evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "suite_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Suite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuiteEvaluate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate",
+        "tags": [
+          "agent-evaluations"
         ]
       }
     },
@@ -3254,6 +5892,354 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/automations": {
+      "get": {
+        "operationId": "listing_api_v1_workspaces__workspace_id__automations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "automations"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_workspaces__workspace_id__automations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSecret"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/automations/eligible": {
+      "get": {
+        "operationId": "eligible_api_v1_workspaces__workspace_id__automations_eligible_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EligibleTriggers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Eligible",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/automations/{automation_id}": {
+      "delete": {
+        "operationId": "archive_api_v1_workspaces__workspace_id__automations__automation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive",
+        "tags": [
+          "automations"
+        ]
+      },
+      "patch": {
+        "operationId": "update_api_v1_workspaces__workspace_id__automations__automation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/automations/{automation_id}/rotate": {
+      "post": {
+        "operationId": "rotate_api_v1_workspaces__workspace_id__automations__automation_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationSecret"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/automations/{automation_id}/runs": {
+      "get": {
+        "operationId": "history_api_v1_workspaces__workspace_id__automations__automation_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/deployments": {
       "get": {
         "operationId": "listing_api_v1_workspaces__workspace_id__deployments_get",
@@ -3559,6 +6545,287 @@
         "summary": "Recent Runs",
         "tags": [
           "deployments"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/http-tools": {
+      "get": {
+        "operationId": "listing_api_v1_workspaces__workspace_id__http_tools_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpToolList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "http-tools"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_workspaces__workspace_id__http_tools_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HttpToolCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpToolRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "http-tools"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/http-tools/{tool_id}/revoke": {
+      "post": {
+        "operationId": "revoke_api_v1_workspaces__workspace_id__http_tools__tool_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HttpGeneration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpToolRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "http-tools"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/http-tools/{tool_id}/rotate": {
+      "post": {
+        "operationId": "rotate_api_v1_workspaces__workspace_id__http_tools__tool_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HttpCredentialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpToolRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate",
+        "tags": [
+          "http-tools"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/http-tools/{tool_id}/test": {
+      "post": {
+        "operationId": "test_api_v1_workspaces__workspace_id__http_tools__tool_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HttpToolTest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test",
+        "tags": [
+          "http-tools"
         ]
       }
     },
@@ -4770,6 +8037,108 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/templates": {
+      "post": {
+        "operationId": "create_template_api_v1_workspaces__workspace_id__templates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/templates/import": {
+      "post": {
+        "operationId": "import_template_api_v1_workspaces__workspace_id__templates_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplatePackage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/templates/{template_key}/instantiate": {
       "post": {
         "operationId": "instantiate_api_v1_workspaces__workspace_id__templates__template_key__instantiate_post",
@@ -5033,6 +8402,100 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/usage": {
+      "get": {
+        "operationId": "usage_api_v1_workspaces__workspace_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Usage",
+        "tags": [
+          "usage"
+        ]
+      },
+      "patch": {
+        "operationId": "limits_api_v1_workspaces__workspace_id__usage_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageLimits"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Limits",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/workflow-runs": {
       "get": {
         "operationId": "list_workflow_runs_api_v1_workspaces__workspace_id__workflow_runs_get",
@@ -5053,9 +8516,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Workflow Runs Api V1 Workspaces  Workspace Id  Workflow Runs Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkflowRunList"
                 }
               }
             },
@@ -5117,9 +8578,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Submit Workflow Run Api V1 Workspaces  Workspace Id  Workflow Runs Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkflowRunRead"
                 }
               }
             },
@@ -5172,9 +8631,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Workflow Run Detail Api V1 Workspaces  Workspace Id  Workflow Runs  Run Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkflowRunRead"
                 }
               }
             },
@@ -5192,6 +8649,79 @@
           }
         },
         "summary": "Workflow Run Detail",
+        "tags": [
+          "workflow-runs"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflow-runs/{run_id}/approvals/{pause_id}/decision": {
+      "post": {
+        "operationId": "approval_decision_api_v1_workspaces__workspace_id__workflow_runs__run_id__approvals__pause_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "pause_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pause Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approval Decision",
         "tags": [
           "workflow-runs"
         ]
@@ -5227,9 +8757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cancel Workflow Run Api V1 Workspaces  Workspace Id  Workflow Runs  Run Id  Cancel Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/WorkflowRunRead"
                 }
               }
             },
@@ -5247,6 +8775,141 @@
           }
         },
         "summary": "Cancel Workflow Run",
+        "tags": [
+          "workflow-runs"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflow-runs/{run_id}/replay": {
+      "post": {
+        "operationId": "replay_workflow_api_v1_workspaces__workspace_id__workflow_runs__run_id__replay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Workflow",
+        "tags": [
+          "workflow-runs"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflow-runs/{run_id}/steps/{node_id}": {
+      "get": {
+        "operationId": "workflow_step_api_v1_workspaces__workspace_id__workflow_runs__run_id__steps__node_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowStepDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Workflow Step",
         "tags": [
           "workflow-runs"
         ]
@@ -5345,6 +9008,66 @@
           }
         },
         "summary": "Create",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflows/call-options": {
+      "get": {
+        "operationId": "call_options_api_v1_workspaces__workspace_id__workflows_call_options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_workflow_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Workflow Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowCallOptions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Call Options",
         "tags": [
           "workflows"
         ]
@@ -5463,6 +9186,163 @@
           }
         },
         "summary": "Update",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflows/{workflow_id}/check": {
+      "post": {
+        "description": "Validate an unsaved draft so the builder can show field errors while editing.",
+        "operationId": "check_draft_api_v1_workspaces__workspace_id__workflows__workflow_id__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftCheck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Check Draft Api V1 Workspaces  Workspace Id  Workflows  Workflow Id  Check Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Draft",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflows/{workflow_id}/nodes/{node_id}/test": {
+      "post": {
+        "description": "Run one step of the unsaved draft on sample input.",
+        "operationId": "test_draft_node_api_v1_workspaces__workspace_id__workflows__workflow_id__nodes__node_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeTest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Test Draft Node Api V1 Workspaces  Workspace Id  Workflows  Workflow Id  Nodes  Node Id  Test Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Draft Node",
         "tags": [
           "workflows"
         ]

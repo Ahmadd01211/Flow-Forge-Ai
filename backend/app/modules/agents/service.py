@@ -175,6 +175,7 @@ def publish(
     agent_id: uuid.UUID,
     actor_id: uuid.UUID,
     body: SnapshotCreate,
+    raw_catalog: str = "[]",
 ) -> tuple[AgentVersion, bool]:
     agent = get_agent(db, workspace_id, agent_id, lock=True)
     check_revision(agent, body.expected_revision)
@@ -189,10 +190,16 @@ def publish(
         return existing, False
     config = AgentConfig.model_validate(agent.config).model_dump()
     connection = get_connection(db, workspace_id, config["provider"], lock=True)
-    checked = assess(db, workspace_id, config, connection)
+    checked = assess(db, workspace_id, config, connection, raw_catalog)
     if checked["errors"]:
         first = checked["errors"][0]
         fail(409 if first["code"] in {"PROVIDER_REQUIRED", "TOOL_NOT_APPROVED"} else 422, first["code"], first["message"])
+    from app.modules.mcp.agent_grants import pin
+    if config.get("mcp_tools"):
+        config["mcp_tools"] = pin(db, workspace_id, config["mcp_tools"], raw_catalog)
+    if config.get("http_tools"):
+        from app.modules.http_tools.service import pin as pin_http
+        config["http_tools"] = pin_http(db, workspace_id, config["http_tools"])
     number = (
         db.scalar(select(func.max(AgentVersion.number)).where(AgentVersion.agent_id == agent.id))
         or 0

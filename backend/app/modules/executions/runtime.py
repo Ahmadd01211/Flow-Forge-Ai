@@ -73,11 +73,15 @@ def _openai_response(key: str, payload: dict, timeout: float, url: str = RESPONS
         raise ProviderFailure("PROVIDER_OUTCOME_UNKNOWN", uncertain=True) from None
 
 
+def checked_usage(input_tokens, output_tokens) -> tuple[int, int]:
+    if any(type(value) is not int or value < 0 for value in (input_tokens, output_tokens)):
+        raise ProviderFailure("PROVIDER_USAGE_MISSING", uncertain=True)
+    return input_tokens, output_tokens
+
+
 def _openai_usage(result: dict) -> tuple[int, int]:
     usage = result.get("usage") or {}
-    input_tokens, output_tokens = usage.get("input_tokens"), usage.get("output_tokens")
-    if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
-        raise ProviderFailure("PROVIDER_USAGE_MISSING", uncertain=True)
+    input_tokens, output_tokens = checked_usage(usage.get("input_tokens"), usage.get("output_tokens"))
     if result.get("status") != "completed":
         raise ProviderFailure("PROVIDER_INCOMPLETE", uncertain=True)
     return input_tokens, output_tokens
@@ -318,6 +322,20 @@ FUNCTIONS = {
 }
 
 
+def _provider_approved(settings, version):
+    sessions = make_sessions(settings.database_url)
+    try:
+        with sessions() as db:
+            row = db.scalar(select(IntegrationConnection).where(
+                IntegrationConnection.workspace_id == version.workspace_id,
+                IntegrationConnection.id == version.connection_id,
+            ))
+            return bool(row and row.state == "active" and row.credential_generation == version.credential_generation
+                        and version.config["model_id"] in row.verified_models)
+    finally:
+        sessions.kw["bind"].dispose()
+
+
 def _tool_approved(settings: Settings, workspace_id: uuid.UUID, tool_key: str) -> bool:
     sessions = make_sessions(settings.database_url)
     try:
@@ -340,6 +358,12 @@ def _run_active(settings: Settings, run_id: uuid.UUID, token: uuid.UUID) -> bool
     try:
         with sessions() as db:
             run = db.get(AgentRun, run_id)
+            if run:
+                from app.modules.executions.authorization import assert_authorized
+                try:
+                    assert_authorized(db, run)
+                except HTTPException:
+                    return False
             return bool(
                 run
                 and run.state == "running"
@@ -385,23 +409,40 @@ def generate_openai_with_tools(
     budget_override: Decimal | None = None,
 ) -> tuple[dict, int, int]:
     """Stateless function-call loop; version grants and live installation both gate each call."""
+    from app.modules.http_tools.service import alias as http_alias
+    from app.modules.http_tools.service import invoke_agent as invoke_http
+    from app.modules.mcp.agent_grants import alias
+    from app.modules.mcp.agent_grants import invoke as invoke_mcp
     grants = version.config["tool_keys"]
     names = {FUNCTIONS[tool_key]["name"]: tool_key for tool_key in grants}
+    remote = {"mcp:" + alias(g): g for g in version.config.get("mcp_tools", [])}
+    names.update({alias(g): key for key, g in remote.items()})
+    http_remote = {"http:" + http_alias(g): g for g in version.config.get("http_tools", [])}
+    names.update({http_alias(g): key for key, g in http_remote.items()})
+    functions = [FUNCTIONS[tool_key] for tool_key in grants] + [
+        {"type": "function", "name": alias(g), "description": (g["server_id"] + "/" + g["tool_name"] + ": " + g.get("description", ""))[:500],
+         "parameters": g["input_schema"], "strict": False} for g in remote.values()] + [
+        {"type": "function", "name": http_alias(g), "description": (g["name"] + ": " + g.get("description", ""))[:500],
+         "parameters": g["input_schema"], "strict": False} for g in http_remote.values()]
     transcript: list = [{"role": "user", "content": json.dumps(input_data, ensure_ascii=False)}]
     total_input = total_output = calls = 0
+    finalizing = False
     started = time.monotonic()
-    input_price, output_price = MODEL_PRICES[("openai", version.config["model_id"])]
+    provider = version.config.get("provider", "openai")
+    input_price, output_price = MODEL_PRICES[(provider, version.config["model_id"])]
     budget = min(Decimal(version.config["limits"]["max_cost_usd"]), budget_override) if budget_override is not None else Decimal(version.config["limits"]["max_cost_usd"])
     for _ in range(version.config["limits"]["max_iterations"]):
         if active_check is not None and not active_check():
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=bool(total_input))
         if run_id and claim_token and not _run_active(settings, run_id, claim_token):
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=bool(total_input))
+        if not _provider_approved(settings, version):
+            raise ProviderFailure("CREDENTIAL_CHANGED", uncertain=bool(total_input))
         remaining_time = timeout - (time.monotonic() - started)
         if remaining_time < 1:
             raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
         spent = input_price * total_input + output_price * total_output
-        estimate = input_price * len(json.dumps(transcript, ensure_ascii=False).encode())
+        estimate = input_price * len(json.dumps([transcript, functions, version.config["instructions"], version.config["output_schema"]], ensure_ascii=False).encode())
         allowance = int((budget - spent - estimate) / output_price)
         if allowance < 16:
             raise ProviderFailure("RUN_BUDGET_EXCEEDED", uncertain=bool(total_input))
@@ -411,7 +452,7 @@ def generate_openai_with_tools(
             "input": transcript,
             "max_output_tokens": min(max_tokens, allowance),
             "store": False,
-            "tools": [FUNCTIONS[tool_key] for tool_key in grants],
+            "tools": [] if finalizing else functions,
             "parallel_tool_calls": False,
             "text": {
                 "format": {
@@ -423,7 +464,11 @@ def generate_openai_with_tools(
             },
         }
         _trace(settings, run_id, claim_token, "model", "started")
-        result = _openai_response(key, payload, min(30.0, remaining_time))
+        if provider == "openai":
+            result = _openai_response(key, payload, min(30.0, remaining_time))
+        else:
+            from app.modules.executions.tool_protocols import roundtrip
+            result = roundtrip(provider, key, payload, min(30.0, remaining_time))
         used_input, used_output = _openai_usage(result)
         _trace(
             settings,
@@ -444,6 +489,13 @@ def generate_openai_with_tools(
         function_calls = [
             item for item in items if isinstance(item, dict) and item.get("type") == "function_call"
         ]
+        if result.get("_needs_finalization"):
+            # Gemini 2.5 separates tool use from the native structured-output call.
+            transcript.extend(items)
+            finalizing = True
+            continue
+        if finalizing and function_calls:
+            raise ProviderFailure("TOOL_NOT_GRANTED", uncertain=True)
         if not function_calls:
             return _openai_output(result, version), total_input, total_output
         if len(function_calls) != 1 or calls >= version.config["limits"]["max_tool_calls"]:
@@ -456,20 +508,38 @@ def generate_openai_with_tools(
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=True)
         if active_check is not None and not active_check():
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=True)
-        if not _tool_approved(settings, version.workspace_id, tool_key):
+        if tool_key not in remote and tool_key not in http_remote and not _tool_approved(settings, version.workspace_id, tool_key):
             raise ProviderFailure("TOOL_APPROVAL_REVOKED", uncertain=True)
         _trace(settings, run_id, claim_token, "tool", "started", tool_key=tool_key)
         try:
             arguments = json.loads(call["arguments"])
             if not isinstance(arguments, dict):
                 raise ValueError
-            if tool_key == "json.extract":
+            if tool_key in remote:
+                remaining_time = timeout - (time.monotonic() - started)
+                if remaining_time < 1:
+                    raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
+                tool_output = invoke_mcp(settings, version.workspace_id, remote[tool_key], arguments, remaining_time)
+            elif tool_key in http_remote:
+                remaining_time = timeout - (time.monotonic() - started)
+                if remaining_time < 1:
+                    raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
+                tool_output = invoke_http(settings, version.workspace_id, http_remote[tool_key], arguments, remaining_time)
+            elif tool_key == "json.extract":
                 arguments = {
                     "document": json.loads(arguments["document_json"]),
                     "pointer": arguments["pointer"],
                 }
-            tool_output = invoke(tool_key, arguments)
-        except (ValueError, KeyError, TypeError, HTTPException):
+                tool_output = invoke(tool_key, arguments)
+            else:
+                tool_output = invoke(tool_key, arguments)
+        except HTTPException as exc:
+            code = exc.detail.get("code", "TOOL_INPUT_INVALID") if isinstance(exc.detail, dict) else "TOOL_INPUT_INVALID"
+            if (tool_key in remote or tool_key in http_remote) and code not in {"MCP_INPUT_SCHEMA_INVALID", "HTTP_INPUT_SCHEMA_INVALID", "HTTP_QUERY_INVALID", "HTTP_QUERY_TOO_LARGE", "PAYLOAD_TOO_LARGE"}:
+                _trace(settings, run_id, claim_token, "tool", "failed", tool_key=tool_key, error_code=code)
+                raise ProviderFailure(code, uncertain=True) from None
+            tool_output = {"error": "TOOL_INPUT_INVALID"}
+        except (ValueError, KeyError, TypeError):
             tool_output = {"error": "TOOL_INPUT_INVALID"}
         _trace(
             settings,
@@ -597,6 +667,13 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 run.finished_at = now
                 db.commit()
                 return
+            from app.modules.executions.authorization import assert_authorized
+            try:
+                assert_authorized(db, run)
+            except HTTPException:
+                run.state, run.error_code, run.finished_at = "failed", "RUN_AUTHORIZATION_REVOKED", now
+                db.commit()
+                return
             version = db.scalar(
                 select(AgentVersion).where(
                     AgentVersion.id == run.version_id, AgentVersion.workspace_id == run.workspace_id
@@ -634,6 +711,15 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 run.finished_at = now
                 db.commit()
                 return
+            from app.modules.agents.tool_grants import validate_grants
+            try:
+                validate_grants(db, run.workspace_id, version.config, settings.mcp_catalog_json)
+            except HTTPException as exc:
+                run.state = "failed"
+                run.error_code = exc.detail.get("code", "MCP_GRANT_CHANGED")
+                run.finished_at = now
+                db.commit()
+                return
             key = decrypt_secret(
                 master,
                 run.workspace_id,
@@ -663,13 +749,19 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 run.finished_at = now
                 db.commit()
                 return
+            try:
+                assert_authorized(db, run)
+            except HTTPException:
+                run.state, run.error_code, run.finished_at = "failed", "RUN_AUTHORIZATION_REVOKED", now
+                db.commit()
+                return
             timeout = min(30.0, max(1.0, (run.deadline_at - now).total_seconds()))
             run.model_started_at = now
-            if not version.config.get("tool_keys"):
+            if not version.config.get("tool_keys") and not version.config.get("mcp_tools") and not version.config.get("http_tools"):
                 append_event(db, run, "model", "started")
             db.commit()
         try:
-            if version.config.get("tool_keys"):
+            if version.config.get("tool_keys") or version.config.get("mcp_tools") or version.config.get("http_tools"):
                 output, input_tokens, output_tokens = generate_openai_with_tools(
                     key,
                     version,
@@ -684,6 +776,7 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 output, input_tokens, output_tokens = generate(
                     key, version, input_data, run.max_output_tokens, timeout
                 )
+                input_tokens, output_tokens = checked_usage(input_tokens, output_tokens)
                 _trace(
                     settings,
                     identity,

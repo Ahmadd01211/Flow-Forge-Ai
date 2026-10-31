@@ -20,11 +20,12 @@ export default async function Overview({
 }) {
   const { workspaceId } = await params,
     base = `/w/${workspaceId}`;
-  const [stats, session] = await Promise.all([
+  const [stats, session, usage] = await Promise.all([
     serverApi<{ agents: number; workflows: number }>(
       `/workspaces/${workspaceId}/overview`,
     ),
     serverApi<SessionData>("/auth/session"),
+    serverApi<{ accepted_runs: number; active_runs: number; measured_usd: string }>(`/workspaces/${workspaceId}/usage`),
   ]);
   return (
     <>
@@ -104,9 +105,9 @@ export default async function Overview({
           },
           {
             icon: ShieldCheck,
-            label: "Live execution",
-            value: "Not enabled",
-            note: "Runtime will follow validated definitions",
+            label: "Runs today",
+            value: usage.accepted_runs,
+            note: `${usage.active_runs} active · $${Number(usage.measured_usd).toFixed(4)} recorded model usage`,
           },
         ].map((m) => (
           <article className="metric-card" key={m.label}>
@@ -131,7 +132,7 @@ export default async function Overview({
               <p>A few clear steps to build your foundation.</p>
             </div>
             <Badge>
-              {Math.min(1, stats.agents) + Math.min(1, stats.workflows)}/3 ready
+              {Math.min(1, stats.agents) + Math.min(1, stats.workflows) + Math.min(1, usage.accepted_runs)}/3 ready
             </Badge>
           </div>
           <ChecklistItem
@@ -155,10 +156,10 @@ export default async function Overview({
             }
           />
           <ChecklistItem
-            done={false}
-            title="Test a real execution"
-            description="Coming with the bounded runtime. No simulated successes."
-            action={<Badge tone="amber">Next milestone</Badge>}
+            done={usage.accepted_runs > 0}
+            title="Test a real execution today"
+            description="Publish a version, submit a run and inspect its steps, results and resource use."
+            action={<Link className="text-link" href={`${base}/executions`}>Inspect executions <ArrowRight size={14} /></Link>}
           />
         </section>
         <section className="panel workspace-principles">

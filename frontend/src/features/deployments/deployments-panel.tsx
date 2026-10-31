@@ -1,4 +1,5 @@
 "use client";
+import { LocalTime } from "@/components/shared/local-time";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -403,7 +404,7 @@ export function DeploymentsPanel({
                               {run.state}
                             </Badge>
                             <span>
-                              {new Date(run.created_at).toLocaleString()}
+                              <LocalTime value={run.created_at} />
                             </span>
                             {run.error_code && <small>{run.error_code}</small>}
                           </li>

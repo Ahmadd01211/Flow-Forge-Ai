@@ -141,6 +141,7 @@ def submit(
             idempotency_key,
             master,
             deployment.id,
+            request.app.state.settings.mcp_catalog_json,
         )
         result = agent_runs.public_run(run, master)
     else:

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -142,6 +143,16 @@ def revoke(
         record(db, workspace_id, actor_id, "mcp.revoked", row.id, {"server_id": server_id})
         db.commit()
     return listing(db, workspace_id, raw_catalog)
+
+
+def check_test_rate(redis, workspace_id: uuid.UUID) -> None:
+    """Interactive MCP calls (tool tests and workflow node tests) share 20 per workspace-minute."""
+    bucket = f"mcp-test:{workspace_id}:{int(time.time()) // 60}"
+    count = redis.incr(bucket)
+    if count == 1:
+        redis.expire(bucket, 70)
+    if count > 20:
+        fail(429, "MCP_RATE_LIMIT", "Too many MCP tool tests. Try again shortly.")
 
 
 def test_tool(

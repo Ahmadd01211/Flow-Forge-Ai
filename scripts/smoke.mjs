@@ -22,7 +22,7 @@ const agent=await agentResponse.json();
 const workflowResponse=await request(`/api/v1/workspaces/${workspace}/workflows`,{method:"POST",headers:mutationHeaders,body:JSON.stringify({name:"Smoke test workflow"})});
 if(workflowResponse.status!==201)throw new Error("Workflow save failed");
 const workflow=await workflowResponse.json();
-for(const path of ["/","/login","/register",`/w/${workspace}/overview`,`/w/${workspace}/agents`,`/w/${workspace}/agents/${agent.id}`,`/w/${workspace}/agents/${agent.id}?tab=versions`,`/w/${workspace}/agents/${agent.id}/test`,`/w/${workspace}/integrations`,`/w/${workspace}/workflows`,`/w/${workspace}/workflows/${workflow.id}/edit`,`/w/${workspace}/settings`]){
+for(const path of ["/","/login","/register",`/w/${workspace}/overview`,`/w/${workspace}/agents`,`/w/${workspace}/agents/${agent.id}`,`/w/${workspace}/agents/${agent.id}?tab=versions`,`/w/${workspace}/agents/${agent.id}/test`,`/w/${workspace}/integrations`,`/w/${workspace}/tools`,`/w/${workspace}/templates`,`/w/${workspace}/executions?kind=workflows`,`/w/${workspace}/automations`,`/w/${workspace}/usage`,`/w/${workspace}/workflows`,`/w/${workspace}/workflows/${workflow.id}/edit`,`/w/${workspace}/settings`]){
  const response=await request(path);const body=await response.text();
  if(response.status!==200||!body.includes("FlowForge")||(path.startsWith("/w/")&&response.redirected))throw new Error(`Page failed: ${path} (${response.status})`);
  console.log(`OK ${path.replaceAll(workspace,"[workspace]").replaceAll(agent.id,"[agent]").replaceAll(workflow.id,"[workflow]")}`);

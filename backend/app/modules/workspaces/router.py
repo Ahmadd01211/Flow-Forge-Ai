@@ -27,7 +27,7 @@ def administration(workspace_id, request, db):
     if member.role not in {"owner", "admin"}:
         fail(403, "FORBIDDEN", "Workspace administration is required.")
     # Serialize membership changes and re-check access after acquiring the lock.
-    workspace = db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update())
+    workspace = db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update().execution_options(populate_existing=True))
     member = db.scalar(
         select(WorkspaceMember)
         .where(WorkspaceMember.id == member.id)

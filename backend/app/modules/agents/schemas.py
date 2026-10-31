@@ -22,6 +22,26 @@ class Limits(BaseModel):
         return format(Decimal(value).normalize(), "f")
 
 
+class McpGrant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    server_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,39}$")
+    tool_name: str = Field(pattern=r"^[a-zA-Z0-9_.-]{1,80}$")
+    connection_generation: int | None = Field(default=None, ge=1)
+    input_schema_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    input_schema: dict = Field(default_factory=dict)
+    description: str = Field(default="", max_length=500)
+
+
+class HttpGrant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tool_id: str = Field(pattern=r"^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$")
+    connection_generation: int | None = Field(default=None, ge=1)
+    spec_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    input_schema: dict = Field(default_factory=dict)
+    name: str = Field(default="", max_length=100)
+    description: str = Field(default="", max_length=500)
+
+
 class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
     schema_version: int = Field(default=1, ge=1, le=1)
@@ -48,6 +68,22 @@ class AgentConfig(BaseModel):
         }
     )
     limits: Limits = Field(default_factory=Limits)
+    mcp_tools: list[McpGrant] = Field(default_factory=list, max_length=8)
+    http_tools: list[HttpGrant] = Field(default_factory=list, max_length=8)
+
+    @field_validator("http_tools")
+    @classmethod
+    def unique_http_grants(cls, value):
+        if len({grant.tool_id.lower() for grant in value}) != len(value):
+            raise ValueError("Select each HTTP tool once.")
+        return value
+
+    @field_validator("mcp_tools")
+    @classmethod
+    def unique_mcp_tools(cls, value):
+        if len({(g.server_id, g.tool_name) for g in value}) != len(value):
+            raise ValueError("Each MCP tool can only be granted once")
+        return value
 
     @field_validator("tool_keys")
     @classmethod

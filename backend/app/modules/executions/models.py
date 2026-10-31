@@ -43,6 +43,7 @@ class AgentRun(Base):
         Index("ix_agent_run_history", "workspace_id", text("created_at DESC"), text("id DESC")),
         Index("ix_agent_run_dispatch", "state", "last_dispatched_at"),
         Index("ix_agent_run_deployment", "deployment_id", "created_at"),
+        Index("ix_agent_run_active_workspace", "workspace_id", postgresql_where=text("state IN ('queued','running')")),
     )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspace.id"))

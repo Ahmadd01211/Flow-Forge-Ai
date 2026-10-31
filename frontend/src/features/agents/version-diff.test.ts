@@ -7,6 +7,8 @@ const config: AgentConfig = {
   provider: "openai",
   model_id: "",
   tool_keys: [],
+  mcp_tools: [],
+  http_tools: [],
   input_schema: { type: "object", properties: { ticket: { type: "string" } } },
   output_schema: { type: "object" },
   limits: {

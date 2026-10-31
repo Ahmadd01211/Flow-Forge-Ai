@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   Bot,
+  Clock3,
   ChartNoAxesCombined,
   ChevronDown,
   ChevronRight,
@@ -29,6 +30,7 @@ const nav = [
   { href: "overview", label: "Overview", icon: LayoutDashboard },
   { href: "agents", label: "Agents", icon: Bot },
   { href: "workflows", label: "Workflows", icon: GitBranch },
+  { href: "automations", label: "Triggers & schedules", icon: Clock3 },
   { href: "templates", label: "Templates", icon: LayoutGrid },
   { href: "executions", label: "Executions", icon: Play },
   { href: "deployments", label: "Deployments", icon: Globe2 },

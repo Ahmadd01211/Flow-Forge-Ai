@@ -24,9 +24,9 @@ async def _session(url: str, key: str, action):
             return await action(client)
 
 
-def _call(url: str, key: str, action):
+def _call(url: str, key: str, action, timeout_seconds: float = 12.0):
     try:
-        return asyncio.run(asyncio.wait_for(_session(url, key, action), timeout=12.0))
+        return asyncio.run(asyncio.wait_for(_session(url, key, action), timeout=timeout_seconds))
     except Exception as exc:
         if isinstance(exc, HTTPException):
             raise
@@ -62,14 +62,14 @@ def discover(url: str, key: str) -> list[dict]:
     return tools
 
 
-def call_tool(url: str, key: str, name: str, arguments: dict) -> dict:
+def call_tool(url: str, key: str, name: str, arguments: dict, timeout_seconds: float = 12.0) -> dict:
     bounded_json(arguments, max_bytes=65536)
 
     async def action(client):
         result = await client.call_tool(name, arguments)
         return result.model_dump(mode="json")
 
-    result = _call(url, key, action)
+    result = _call(url, key, action, timeout_seconds)
     bounded_json(result, max_bytes=65536)
     if len(json.dumps(result).encode()) > 65536:
         fail(502, "MCP_RESULT_TOO_LARGE", "The MCP tool returned too much data.")

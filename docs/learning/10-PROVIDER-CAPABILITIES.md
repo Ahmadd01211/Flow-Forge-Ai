@@ -1,5 +1,7 @@
 # Phase 3: provider connections and execution capabilities
 
+Phase 5 update: all reviewed model IDs below now support the bounded local/MCP tool harness. The table's original “No” entries describe the phase 3 milestone. See [current tool protocols and constraints](12-AGENT-MCP-AND-REGRESSIONS.md) for the delivered implementation and mock/live verification distinction.
+
 ## What this phase delivers
 
 The workspace can connect separate encrypted keys for OpenAI, OpenRouter, Claude, Gemini and DeepSeek. The same setup component selects a provider, verifies a key, searches its model catalog, explains execution support, and saves a default model. Admins can refresh a catalog using the encrypted saved key without supplying it again or changing its generation. Rotation/revocation remains a separate action.

@@ -26,7 +26,7 @@ def submit_run(
 ):
     _, member = authorize(request, db, workspace_id, write=True)
     master = load_master_key(request.app.state.settings.credential_key_path)
-    run, created = service.submit(db, workspace_id, member.user_id, body, idempotency_key, master)
+    run, created = service.submit(db, workspace_id, member.user_id, body, idempotency_key, master, raw_catalog=request.app.state.settings.mcp_catalog_json)
     if not created:
         response.status_code = 200
     return service.public_run(run, master)

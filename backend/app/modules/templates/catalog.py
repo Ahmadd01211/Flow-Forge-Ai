@@ -1,10 +1,16 @@
 """Versioned, code-reviewed starter templates copied into private workspace drafts."""
 
+from app.modules.templates.action_starters import action_starters
+from app.modules.templates.approval_starter import approval_starter
+from app.modules.templates.composition_starters import composition_starters
 from app.modules.workflows.schemas import initial_graph
 
 
 def templates() -> dict[str, dict]:
     return {
+        **action_starters(),
+        **approval_starter(),
+        **composition_starters(),
         "support-triage": {
             "key": "support-triage",
             "kind": "agent",
@@ -111,8 +117,8 @@ def templates() -> dict[str, dict]:
                         "position": {"x": 340, "y": 250},
                         "config": {
                             "left": {"kind": "input", "pointer": "/priority"},
-                            "operator": "equals",
-                            "right": "urgent",
+                            "operator": "eq",
+                            "right": {"kind": "literal", "value": "urgent"},
                         },
                     },
                     {
@@ -120,12 +126,14 @@ def templates() -> dict[str, dict]:
                         "type": "transform",
                         "label": "Urgent path",
                         "position": {"x": 640, "y": 120},
+                        "config": {"fields": {"queue": {"kind": "literal", "value": "on-call"}}},
                     },
                     {
                         "id": "normal",
                         "type": "transform",
                         "label": "Normal path",
                         "position": {"x": 640, "y": 380},
+                        "config": {"fields": {"queue": {"kind": "literal", "value": "standard"}}},
                     },
                     {
                         "id": "result",

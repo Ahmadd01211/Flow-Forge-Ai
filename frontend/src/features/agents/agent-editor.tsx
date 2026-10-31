@@ -1,4 +1,6 @@
 "use client";
+import { LocalTime } from "@/components/shared/local-time";
+import { SaveTemplate } from "@/features/templates/save-template";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,6 +34,8 @@ import type { ToolEntry } from "@/features/tools/tool-registry";
 import { isRunnableModel } from "./runnable-models";
 import { agentStarters } from "./agent-starters";
 import { SchemaEditor } from "./schema-editor";
+import { HttpGrants } from "./http-grants";
+import type { HttpTool } from "@/features/tools/http-tool-registry";
 import type { components } from "@/lib/api/generated";
 
 const defaultConfig: AgentConfig = {
@@ -40,6 +44,8 @@ const defaultConfig: AgentConfig = {
   provider: "openai",
   model_id: "",
   tool_keys: [],
+  mcp_tools: [],
+  http_tools: [],
   input_schema: {
     type: "object",
     properties: { ticket: { type: "string" } },
@@ -75,6 +81,8 @@ export function AgentEditor({
   canEdit = true,
   connections = [],
   tools = [],
+  mcpServers = [],
+  httpTools = [],
 }: {
   agent?: Agent;
   workspaceId: string;
@@ -83,6 +91,13 @@ export function AgentEditor({
   canEdit?: boolean;
   connections?: Connection[];
   tools?: ToolEntry[];
+  httpTools?: HttpTool[];
+  mcpServers?: {
+    id: string;
+    name: string;
+    runnable_tools: string[];
+    runnable_schemas: Record<string, unknown>;
+  }[];
 }) {
   const preferredConnection = connections.find(
     (item) => item.state === "active" && item.default_model_id,
@@ -360,6 +375,17 @@ export function AgentEditor({
             )}
             Create snapshot
           </Button>
+          {agent && (
+            <SaveTemplate
+              workspaceId={workspaceId}
+              sourceId={agent.id}
+              kind="agent"
+              revision={revision}
+              name={name}
+              description={description}
+              disabled={busy || !canEdit || current !== baseline}
+            />
+          )}
           <Button onClick={save} disabled={busy || !name.trim() || !canEdit}>
             {busy ? (
               <LoaderCircle size={16} className="spin" />
@@ -510,6 +536,8 @@ export function AgentEditor({
                           ...config,
                           provider: e.target.value as AgentConfig["provider"],
                           tool_keys: [],
+                          mcp_tools: [],
+                          http_tools: [],
                           model_id:
                             connections.find(
                               (item) => item.provider === e.target.value,
@@ -535,11 +563,17 @@ export function AgentEditor({
                             setConfig({
                               ...config,
                               model_id: e.target.value,
+                              mcp_tools: connection.model_capabilities[
+                                e.target.value
+                              ]?.local_tools
+                                ? config.mcp_tools
+                                : [],
                               tool_keys: connection.model_capabilities[
                                 e.target.value
                               ]?.local_tools
                                 ? config.tool_keys
                                 : [],
+                              http_tools: connection.model_capabilities[e.target.value]?.local_tools ? config.http_tools : [],
                             })
                           }
                           disabled={!canEdit}
@@ -557,7 +591,7 @@ export function AgentEditor({
                       </label>
                       <p className="field-hint">
                         Access was checked on{" "}
-                        {new Date(connection.verified_at).toLocaleString()}.
+                        <LocalTime value={connection.verified_at} />.
                         Publishing validates your saved schema; it does not
                         execute the model. Live runs are available only for
                         models marked above.
@@ -582,14 +616,14 @@ export function AgentEditor({
                     <ShieldCheck size={18} />
                     <div>
                       <strong>
-                        {config.tool_keys.length
-                          ? `${config.tool_keys.length} tool grant${config.tool_keys.length === 1 ? "" : "s"} selected`
+                        {config.tool_keys.length + config.mcp_tools.length + config.http_tools.length
+                          ? `${config.tool_keys.length + config.mcp_tools.length + config.http_tools.length} tool grant${config.tool_keys.length + config.mcp_tools.length + config.http_tools.length === 1 ? "" : "s"} selected`
                           : "No tool access granted"}
                       </strong>
                       <p>
-                        Models with local tool support can call selected tools
-                        after publication. Workspace approval is checked when
-                        each run starts and before each call.
+                        Models with tool support can call selected tools after
+                        publication. Workspace approval is checked when each run
+                        starts and before each call.
                       </p>
                     </div>
                   </div>
@@ -654,6 +688,120 @@ export function AgentEditor({
                       </Link>
                     </Button>
                   </div>
+                  <section className="agent-mcp-grants">
+                    <h3>Connected MCP tools</h3>
+                    <p>
+                      Select read-only tools from your workspace connections.
+                      Publication pins each tool schema and credential
+                      generation.
+                    </p>
+                    {mcpServers.flatMap((server) =>
+                      server.runnable_tools.map((name) => {
+                        const selected = config.mcp_tools.some(
+                          (g) =>
+                            g.server_id === server.id && g.tool_name === name,
+                        );
+                        return (
+                          <div
+                            className="agent-tool-option"
+                            key={`${server.id}/${name}`}
+                          >
+                            <label
+                              className="agent-tool-selection"
+                              htmlFor={`mcp-grant-${server.id}-${name}`}
+                            >
+                              <input
+                                type="checkbox"
+                                id={`mcp-grant-${server.id}-${name}`}
+                                aria-label={`Grant ${server.name} / ${name}`}
+                                checked={selected}
+                                disabled={
+                                  !canEdit ||
+                                  (!selected &&
+                                    (!connection?.model_capabilities[
+                                      config.model_id
+                                    ]?.local_tools ||
+                                      config.mcp_tools.length >= 8))
+                                }
+                                onChange={(e) =>
+                                  setConfig({
+                                    ...config,
+                                    mcp_tools: e.target.checked
+                                      ? [
+                                          ...config.mcp_tools,
+                                          {
+                                            server_id: server.id,
+                                            tool_name: name,
+                                            description: "",
+                                          },
+                                        ]
+                                      : config.mcp_tools.filter(
+                                          (g) =>
+                                            g.server_id !== server.id ||
+                                            g.tool_name !== name,
+                                        ),
+                                  })
+                                }
+                              />
+                              <span>
+                                <strong>
+                                  {server.name} / {name}
+                                </strong>
+                                <small>Read-only remote tool</small>
+                              </span>
+                            </label>
+                            <details>
+                              <summary>Input schema</summary>
+                              <pre>
+                                {JSON.stringify(
+                                  server.runnable_schemas[name],
+                                  null,
+                                  2,
+                                )}
+                              </pre>
+                            </details>
+                          </div>
+                        );
+                      }),
+                    )}
+                    {config.mcp_tools
+                      .filter(
+                        (g) =>
+                          !mcpServers.some(
+                            (s) =>
+                              s.id === g.server_id &&
+                              s.runnable_tools.includes(g.tool_name),
+                          ),
+                      )
+                      .map((g) => (
+                        <p key={`${g.server_id}/${g.tool_name}`}>
+                          {g.server_id}/{g.tool_name} is no longer available.{" "}
+                          <button
+                            disabled={!canEdit}
+                            onClick={() =>
+                              setConfig({
+                                ...config,
+                                mcp_tools: config.mcp_tools.filter(
+                                  (x) => x !== g,
+                                ),
+                              })
+                            }
+                          >
+                            Remove grant
+                          </button>
+                        </p>
+                      ))}
+                    {!mcpServers.some((s) => s.runnable_tools.length) && (
+                      <p>No reviewed read-only MCP tools are connected yet.</p>
+                    )}
+                    <Link
+                      className="text-link"
+                      href={`/w/${workspaceId}/integrations`}
+                    >
+                      Manage MCP connections
+                    </Link>
+                  </section>
+                  <HttpGrants workspaceId={workspaceId} tools={httpTools} grants={config.http_tools} onChange={http_tools => setConfig({ ...config, http_tools })} canEdit={canEdit} modelAllowsTools={!!connection?.model_capabilities[config.model_id]?.local_tools} />
                 </>
               ) : tab === "schemas" ? (
                 <>
@@ -786,8 +934,8 @@ export function AgentEditor({
           <div className="summary-line">
             <span>Tool permissions</span>
             <strong>
-              {config.tool_keys.length
-                ? `${config.tool_keys.length} selected`
+              {config.tool_keys.length + config.mcp_tools.length + config.http_tools.length
+                ? `${config.tool_keys.length + config.mcp_tools.length + config.http_tools.length} selected`
                 : "None"}
             </strong>
           </div>

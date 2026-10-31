@@ -6,10 +6,12 @@ from decimal import Decimal
 from celery import Celery
 from sqlalchemy import or_, select
 
+from app import models  # noqa: F401 -- workers start without API router imports
 from app.core.config import Settings
 from app.core.db import make_sessions
 from app.modules.executions.models import AgentRun
 from app.modules.executions.runtime import execute
+from app.modules.workflows.checkpoints import settle_unfinished
 from app.modules.workflows.models import WorkflowRun, WorkflowVersion
 from app.modules.workflows.runtime import execute as execute_workflow_runtime
 
@@ -43,6 +45,9 @@ def reconcile_workflows_once() -> int:
     now = datetime.now(UTC)
     dispatched = []
     try:
+        from app.core.credentials import load_master_key
+        from app.modules.workflows.pauses import reconcile as reconcile_pauses
+        reconcile_pauses(sessions, load_master_key(settings.credential_key_path), now)
         with sessions() as db:
             rows = db.scalars(
                 select(WorkflowRun)
@@ -61,13 +66,16 @@ def reconcile_workflows_once() -> int:
                             run.uncertain_cost_usd = Decimal(version.graph["limits"]["max_cost_usd"])
                     run.finished_at = now
                     run.claim_token = None
+                    settle_unfinished(db, run, run.error_code or "RUN_CANCELLED")
                 elif (
                     run.state == "running"
-                    and run.external_started_at is None
+                    and not run.external_inflight
+                    and not (run.heartbeat_at is None and run.external_started_at is not None)
                     and run.started_at
-                    and run.started_at < now - timedelta(seconds=6)
+                    and (run.heartbeat_at or run.started_at) < now - timedelta(seconds=10 if run.heartbeat_at else 6)
                 ):
-                    # Local tools are pure; invalidating the claim makes replay safe.
+                    # Completed checkpoints are reusable; uncheckpointed local
+                    # work is pure. An in-flight external call is never replayed.
                     run.state = "queued"
                     run.claim_token = None
                     run.started_at = None
@@ -148,6 +156,8 @@ def maintenance_loop() -> None:
     while True:
         try:
             reconcile_once()
+            from app.modules.automations.service import tick
+            tick(settings)
             reconcile_workflows_once()
             from app.modules.identity.mail import deliver_pending
             sessions = make_sessions(settings.database_url)

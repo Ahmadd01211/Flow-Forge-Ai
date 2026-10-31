@@ -159,6 +159,7 @@ def test_openai_tool_loop_replays_call_and_counts_usage(monkeypatch, model_id):
 
     monkeypatch.setattr("app.modules.executions.runtime._openai_response", reply)
     monkeypatch.setattr("app.modules.executions.runtime._tool_approved", lambda *_: True)
+    monkeypatch.setattr("app.modules.executions.runtime._provider_approved", lambda *_: True)
     version = SimpleNamespace(
         workspace_id=uuid.uuid4(),
         config={
@@ -202,6 +203,7 @@ def test_openai_tool_loop_rechecks_approval(monkeypatch):
         },
     )
     monkeypatch.setattr("app.modules.executions.runtime._tool_approved", lambda *_: False)
+    monkeypatch.setattr("app.modules.executions.runtime._provider_approved", lambda *_: True)
     version = SimpleNamespace(
         workspace_id=uuid.uuid4(),
         config={
