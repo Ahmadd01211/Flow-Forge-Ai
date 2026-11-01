@@ -4148,6 +4148,10 @@ label select {
 .mcp-test h4 { font-size: 14px; margin: 0 0 16px; }
 .mcp-test select { width: 100%; margin-bottom: 16px; }
 .mcp-test .run-input { display: block; margin-bottom: 12px; min-height: 100px; }
+.mcp-test details { margin: 0 0 14px; font-size: 12px; }
+.mcp-fields { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.mcp-fields small { color: var(--muted); }
+.mcp-fields p { margin: 2px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .mcp-layout { grid-template-columns: 1fr; } .mcp-server-list { border-right: 0; border-bottom: 1px solid var(--border); } }
 .template-intro { display: flex; gap: 10px; align-items: flex-start; padding: 13px 16px; margin-bottom: 20px; color: #55518c; background: #f8f7ff; border: 1px solid #dcd9ff; border-radius: 9px; font-size: 12px; line-height: 1.5; }
 .template-intro svg { flex: 0 0 auto; }

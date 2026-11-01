@@ -5,6 +5,7 @@ import { Check, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck } from "lucide
 import { Badge, ErrorNotice } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
+import { exampleArguments, toolFields } from "@/features/workspace/mcp-schema";
 import { DEEPWIKI_MCP_URL, GITHUB_TOOLSETS, githubMcpName, githubMcpUrl, type GithubToolset } from "@/features/workspace/mcp-presets";
 
 export interface McpTool {
@@ -24,6 +25,7 @@ export interface McpServer {
   allowed_tools: string[];
   verified_tools: string[];
   runnable_tools: string[];
+  runnable_schemas: Record<string, unknown>;
   tools: McpTool[];
   policy_editable: boolean;
   state: "not_connected" | "active" | "revoked";
@@ -70,6 +72,7 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
   const server = adding ? undefined : servers.find((item) => item.id === selected);
   const testable = server ? testableTools(server, canManage) : [];
   const tool = testable.includes(selectedTool) ? selectedTool : testable[0] || "";
+  const fields = server && tool ? toolFields(server.runnable_schemas[tool]) : [];
   const base = `/workspaces/${workspaceId}/mcp`;
   const canAdd = canManage && initial.workspace_servers;
 
@@ -169,7 +172,7 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
           {canManage && server.policy_editable && <p>Allowing a write tool lets granted agents and published workflows act on the external service. Put a Human approval step before it in a workflow when a person should review each action.</p>}
         </div>}
         {canManage && <div className="mcp-credential"><label htmlFor="mcp-token">Bearer token <small>Leave blank for a public server</small></label><div className="integration-key-row"><div className="integration-key-input"><KeyRound size={16} /><input id="mcp-token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Optional server token" /></div><Button disabled={busy} onClick={connect}>{busy ? <LoaderCircle size={15} className="spin" /> : <ShieldCheck size={15} />}{server.state === "active" ? "Verify or rotate" : "Connect server"}</Button></div>{server.state === "active" && <button className="mcp-revoke" type="button" disabled={busy} onClick={disconnect}>{server.source === "workspace" ? "Remove server" : "Revoke connection"}</button>}</div>}
-        {server.state === "active" && <div className="mcp-test"><h4>Test a tool</h4>{testable.length ? <><label htmlFor="mcp-tool">Tool</label><select id="mcp-tool" value={tool} onChange={(event) => { setSelectedTool(event.target.value); setOutput(""); }}>{testable.map((name) => <option key={name} value={name}>{name}</option>)}</select><label htmlFor="mcp-arguments">Arguments JSON</label><textarea id="mcp-arguments" className="run-input" spellCheck={false} value={argumentsJson} onChange={(event) => setArgumentsJson(event.target.value)} />{server.tools.find((item) => item.name === tool)?.read_only === false && <p>This tool is not marked read-only. A test makes a real call that may change data.</p>}<Button disabled={busy || !canTest || !tool} onClick={test}>Run tool test</Button>{output && <><label htmlFor="mcp-output">Response JSON</label><pre id="mcp-output" className="tool-output">{output}</pre></>}</> : <p>No allowed tools you can test. Write tools run from agents or published workflows.</p>}</div>}
+        {server.state === "active" && <div className="mcp-test"><h4>Test a tool</h4>{testable.length ? <><label htmlFor="mcp-tool">Tool</label><select id="mcp-tool" value={tool} onChange={(event) => { setSelectedTool(event.target.value); setOutput(""); setArgumentsJson(JSON.stringify(exampleArguments(server.runnable_schemas[event.target.value]), null, 2)); }}>{testable.map((name) => <option key={name} value={name}>{name}</option>)}</select>{fields.length > 0 && <details open><summary>Inputs for {tool}</summary><ul className="mcp-fields">{fields.map((field) => <li key={field.name}><code>{field.name}</code> <small>{field.type}{field.required ? " · required" : " · optional"}</small>{field.description && <p>{field.description}</p>}</li>)}</ul></details>}<div className="row between"><label htmlFor="mcp-arguments">Arguments JSON</label>{fields.length > 0 && <button type="button" className="chip-button" onClick={() => setArgumentsJson(JSON.stringify(exampleArguments(server.runnable_schemas[tool]), null, 2))}>Fill required fields</button>}</div><textarea id="mcp-arguments" className="run-input" spellCheck={false} value={argumentsJson} onChange={(event) => setArgumentsJson(event.target.value)} />{server.tools.find((item) => item.name === tool)?.read_only === false && <p>This tool is not marked read-only. A test makes a real call that may change data.</p>}<Button disabled={busy || !canTest || !tool} onClick={test}>Run tool test</Button>{output && <><label htmlFor="mcp-output">Response JSON</label><pre id="mcp-output" className="tool-output">{output}</pre></>}</> : <p>No allowed tools you can test. Write tools run from agents or published workflows.</p>}</div>}
       </div>}
     </div>}
   </section>;
