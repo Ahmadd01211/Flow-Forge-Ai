@@ -36,14 +36,21 @@ def _call(url: str, key: str, action, timeout_seconds: float = 12.0):
 def discover(url: str, key: str) -> list[dict]:
     async def action(client):
         result = await client.list_tools()
-        return [
-            {
+        tools = []
+        for tool in result.tools:
+            item = {
                 "name": tool.name,
                 "description": (tool.description or "")[:500],
-                "input_schema": tool.inputSchema,
+                "input_schema": tool.input_schema,
             }
-            for tool in result.tools
-        ]
+            # Server-declared hints only seed default policies; an admin decides.
+            hints = tool.annotations
+            if hints and hints.read_only_hint is not None:
+                item["read_only_hint"] = bool(hints.read_only_hint)
+            if hints and hints.destructive_hint is not None:
+                item["destructive_hint"] = bool(hints.destructive_hint)
+            tools.append(item)
+        return tools
 
     tools = _call(url, key, action)
     if (
@@ -67,7 +74,8 @@ def call_tool(url: str, key: str, name: str, arguments: dict, timeout_seconds: f
 
     async def action(client):
         result = await client.call_tool(name, arguments)
-        return result.model_dump(mode="json")
+        # Wire-format (camelCase) keys: callers check isError and structuredContent.
+        return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
     result = _call(url, key, action, timeout_seconds)
     bounded_json(result, max_bytes=65536)

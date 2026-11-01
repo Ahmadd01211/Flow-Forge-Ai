@@ -4,10 +4,10 @@ import hashlib
 
 from sqlalchemy import select
 
-from app.core.credentials import decrypt_secret, load_master_key
+from app.core.credentials import load_master_key
 from app.core.errors import fail
 from app.core.json_contracts import bounded_json, example_errors, validate_user_schema
-from app.modules.mcp.catalog import catalog
+from app.modules.mcp import registry
 from app.modules.mcp.models import McpConnection
 from app.modules.mcp.service import schema_hash
 
@@ -18,30 +18,19 @@ def alias(grant):
 
 
 def resolve(db, workspace_id, grant, raw_catalog, pinned=False):
-    profile = catalog(raw_catalog).get(grant["server_id"])
+    profile = registry.server(db, workspace_id, grant["server_id"], raw_catalog)
     row = db.scalar(
         select(McpConnection).where(
             McpConnection.workspace_id == workspace_id,
             McpConnection.server_id == grant["server_id"],
         )
     )
-    snapshot = (
-        next((t for t in row.tool_snapshots if t["name"] == grant["tool_name"]), None)
-        if row and row.state == "active"
-        else None
-    )
-    if (
-        not profile
-        or grant["tool_name"] not in profile.get("read_only_tools", [])
-        or not row
-        or row.state != "active"
-        or grant["tool_name"] not in row.verified_tools
-        or not snapshot
-    ):
+    snapshot = registry.snapshot(row, grant["tool_name"])
+    if not registry.runnable(profile, row, grant["tool_name"]):
         fail(
             409,
             "MCP_GRANT_CHANGED",
-            "Connect and approve this read-only MCP tool before publishing or running.",
+            "Connect this MCP server and allow the tool before publishing or running.",
         )
     digest = schema_hash(snapshot["input_schema"])
     if pinned and (
@@ -98,20 +87,11 @@ def invoke(settings, workspace_id, grant, arguments, timeout):
                     "MCP_INPUT_SCHEMA_INVALID",
                     "Arguments do not match the granted MCP tool schema.",
                 )
-            token = (
-                decrypt_secret(
-                    load_master_key(settings.credential_key_path),
-                    workspace_id,
-                    row.id,
-                    row.generation,
-                    row.nonce,
-                    row.ciphertext,
-                )
-                if row.nonce and row.ciphertext
-                else ""
+            url, token = registry.endpoint(
+                profile, row, load_master_key(settings.credential_key_path)
             )
         result = call_tool(
-            profile["url"], token, grant["tool_name"], arguments, timeout_seconds=min(12.0, timeout)
+            url, token, grant["tool_name"], arguments, timeout_seconds=min(12.0, timeout)
         )
         if result.get("isError"):
             fail(502, "MCP_TOOL_FAILED", "The MCP tool reported a failure.")

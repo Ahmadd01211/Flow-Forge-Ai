@@ -25,7 +25,7 @@ from app.modules.executions.runtime import (
 )
 from app.modules.executions.service import MAX_INPUT_BYTES, MAX_OUTPUT_TOKENS, MODEL_PRICES
 from app.modules.integrations.models import IntegrationConnection, SecretReference
-from app.modules.mcp.catalog import catalog
+from app.modules.mcp import registry
 from app.modules.mcp.client import call_tool
 from app.modules.mcp.models import McpConnection
 from app.modules.mcp.service import schema_hash
@@ -430,22 +430,22 @@ def _mcp_handler(sessions, identity, token, workspace_id, master, settings):
                 fail(408, "RUN_TIMEOUT", "This workflow run timed out.")
             assert_authorized(db, run)
             server_id, tool_name = node.config["server_id"], node.config["tool_name"]
-            profile = catalog(settings.mcp_catalog_json).get(server_id)
+            profile = registry.server(db, workspace_id, server_id, settings.mcp_catalog_json)
             connection = db.scalar(select(McpConnection).where(
                 McpConnection.workspace_id == workspace_id, McpConnection.server_id == server_id,
             ))
-            snapshot = next((item for item in connection.tool_snapshots if item["name"] == tool_name), None) if connection and connection.state == "active" else None
-            if not profile or tool_name not in profile.get("read_only_tools", []) or not connection or connection.state != "active" or tool_name not in connection.verified_tools or not snapshot or connection.generation != node.config.get("connection_generation") or schema_hash(snapshot["input_schema"]) != node.config.get("input_schema_hash"):
+            snapshot = registry.snapshot(connection, tool_name)
+            if not registry.runnable(profile, connection, tool_name) or connection.generation != node.config.get("connection_generation") or schema_hash(snapshot["input_schema"]) != node.config.get("input_schema_hash"):
                 fail(409, "MCP_GRANT_CHANGED", "The MCP connection or tool schema changed. Republish the workflow.")
             if example_errors(snapshot["input_schema"], data, "input"):
                 fail(422, "MCP_INPUT_SCHEMA_INVALID", "Workflow data does not match the MCP tool input schema.")
-            key = decrypt_secret(master, workspace_id, connection.id, connection.generation, connection.nonce, connection.ciphertext) if connection.nonce and connection.ciphertext else ""
+            url, key = registry.endpoint(profile, connection, master)
             run.external_started_at = now
             run.external_inflight = True
             run.heartbeat_at = now
             remaining_timeout = min(12.0, float(node.policy.get("timeout_seconds", 60)), (run.deadline_at - now).total_seconds())
             db.commit()
-        output = call_tool(profile["url"], key, tool_name, data, remaining_timeout)
+        output = call_tool(url, key, tool_name, data, remaining_timeout)
         if output.get("isError"):
             fail(502, "MCP_TOOL_FAILED", "The MCP tool reported an error.")
         return output

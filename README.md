@@ -8,7 +8,9 @@ User templates: save a draft in the agent editor or visual workflow builder, the
 
 Provider capabilities: Integrations now shows backend-owned execution/tool support and estimated token rates for 11 reviewed model IDs across the five providers. Refresh a model list using the saved key without rotating it. Other provider-listed models remain labeled setup only. See [supported scope and provider sources](docs/learning/10-PROVIDER-CAPABILITIES.md).
 
-Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0024` at startup.
+Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0025` at startup.
+
+MCP servers: owners/admins choose **Integrations → MCP servers → Add server** to connect any public HTTPS MCP server. Read-only tools start allowed; write tools stay blocked until allowed per tool. See [workspace MCP servers and tool policies](docs/learning/23-WORKSPACE-MCP-SERVERS.md).
 
 Calendar schedules: in **Triggers & schedules**, choose **Calendar (cron)** for rules such as `0 9 * * 1-5` in a chosen timezone, and preview the next five runs before saving. See [cron schedules and daylight-saving behavior](docs/learning/22-CRON-SCHEDULES.md).
 
@@ -33,7 +35,7 @@ The initializer preserves an existing `.env` and generates local secrets without
 
 - Accounts, recovery, email verification, teams, invitations and workspace roles.
 - Five provider connections with encrypted keys and eleven reviewed model profiles; bounded native tool protocols for OpenAI, OpenRouter, Claude, Gemini and DeepSeek.
-- Agent authoring, immutable versions, regression examples and read-only MCP/HTTP grants.
+- Agent authoring, immutable versions, regression examples, MCP grants under per-tool Allow/Block policies and read-only HTTP grants.
 - Visual workflows with up to thirty direct steps/four agents, branches, merges, field mappings, bounded For each loops and pinned reusable workflow calls. Expansion is limited to three workflow levels, 120 steps and eight agent calls.
 - Durable runs with encrypted checkpoints, safe recovery, cancellation, local retry policies, explicit replay and step debugging.
 - Authenticated JSON webhooks, interval and cron schedules, pinned deployment endpoints and shared usage/admission budgets.
@@ -41,7 +43,7 @@ The initializer preserves an existing `.env` and generates local secrets without
 - Guided GitHub and Slack recipes on top of approved HTTP tools.
 - Admin-approved HTTPS API tools with encrypted reusable header credentials and durable workflow action receipts.
 - Ten starter templates, including a working child/batch pair and service actions, plus user saving/sharing and portable private JSON import/export.
-- Docker Compose, PostgreSQL migrations through 0024, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
+- Docker Compose, PostgreSQL migrations through 0025, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
 
 Open **Tool Registry → HTTP API tools** to connect a fixed destination. Agents receive reviewed read-only GET grants; write actions execute through published workflows. Credentials never belong in instructions or URLs. Model budgets exclude service API charges. See [API tools and template files](docs/learning/17-HTTP-API-TOOLS-AND-TEMPLATE-FILES.md).
 

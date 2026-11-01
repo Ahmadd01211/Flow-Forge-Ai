@@ -691,7 +691,7 @@ export function AgentEditor({
                   <section className="agent-mcp-grants">
                     <h3>Connected MCP tools</h3>
                     <p>
-                      Select read-only tools from your workspace connections.
+                      Select allowed tools from your workspace MCP servers. Write tools act on the external service.
                       Publication pins each tool schema and credential
                       generation.
                     </p>
@@ -792,7 +792,7 @@ export function AgentEditor({
                         </p>
                       ))}
                     {!mcpServers.some((s) => s.runnable_tools.length) && (
-                      <p>No reviewed read-only MCP tools are connected yet.</p>
+                      <p>No allowed MCP tools yet. Add or connect a server in Integrations.</p>
                     )}
                     <Link
                       className="text-link"

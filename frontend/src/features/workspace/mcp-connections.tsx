@@ -1,29 +1,61 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Globe2, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
+import { Check, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck } from "lucide-react";
 import { Badge, ErrorNotice } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 
+export interface McpTool {
+  name: string;
+  description?: string;
+  read_only_hint?: boolean;
+  destructive_hint?: boolean;
+  read_only: boolean;
+  policy: "allow" | "block";
+}
+
 export interface McpServer {
   id: string;
   name: string;
+  source: "catalog" | "workspace";
+  origin: string | null;
   allowed_tools: string[];
   verified_tools: string[];
   runnable_tools: string[];
+  tools: McpTool[];
+  policy_editable: boolean;
   state: "not_connected" | "active" | "revoked";
   verified_at: string | null;
 }
 
-export function McpConnections({ workspaceId, initialServers, canManage, canTest }: {
+export interface McpListing {
+  items: McpServer[];
+  workspace_servers: boolean;
+}
+
+/** Owners/admins may test any allowed tool; others only allowed read-only tools of workspace servers. */
+export function testableTools(server: McpServer, manager: boolean): string[] {
+  return server.tools
+    .filter((tool) => (server.source === "catalog" ? tool.policy === "allow" || !tool.read_only : tool.policy === "allow" && (tool.read_only || manager)))
+    .map((tool) => tool.name);
+}
+
+function toolKind(tool: McpTool): [string, "green" | "amber" | "neutral"] {
+  if (tool.destructive_hint) return ["Destructive", "amber"];
+  return tool.read_only ? ["Read-only", "green"] : ["Write", "neutral"];
+}
+
+export function McpConnections({ workspaceId, initial, canManage, canTest }: {
   workspaceId: string;
-  initialServers: McpServer[];
+  initial: McpListing;
   canManage: boolean;
   canTest: boolean;
 }) {
-  const [servers, setServers] = useState(initialServers);
-  const [selected, setSelected] = useState(initialServers[0]?.id || "");
+  const [servers, setServers] = useState(initial.items);
+  const [selected, setSelected] = useState(initial.items[0]?.id || "");
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", url: "", token: "" });
   const [token, setToken] = useState("");
   const [selectedTool, setSelectedTool] = useState("");
   const [argumentsJson, setArgumentsJson] = useState("{}");
@@ -31,54 +63,93 @@ export function McpConnections({ workspaceId, initialServers, canManage, canTest
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const server = servers.find((item) => item.id === selected);
-  const tool = server?.verified_tools.includes(selectedTool) ? selectedTool : server?.verified_tools[0] || "";
+  const server = adding ? undefined : servers.find((item) => item.id === selected);
+  const testable = server ? testableTools(server, canManage) : [];
+  const tool = testable.includes(selectedTool) ? selectedTool : testable[0] || "";
   const base = `/workspaces/${workspaceId}/mcp`;
+  const canAdd = canManage && initial.workspace_servers;
 
-  async function connect() {
-    if (!server) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const result = await api<{ items: McpServer[] }>(`${base}/${server.id}`, { method: "PUT", body: JSON.stringify({ bearer_token: token }) });
-      setServers(result.items); setToken(""); setOutput("");
-      setNotice("Server verified. Only operator-approved tools are available for testing.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not connect this MCP server."); }
-    finally { setBusy(false); }
+  function choose(id: string) {
+    setSelected(id); setAdding(false); setToken(""); setSelectedTool(""); setOutput(""); setError(""); setNotice("");
   }
 
-  async function disconnect() {
-    if (!server) return;
+  async function run(action: () => Promise<void>, failure: string) {
     setBusy(true); setError(""); setNotice("");
-    try {
-      const result = await api<{ items: McpServer[] }>(`${base}/${server.id}`, { method: "DELETE" });
-      setServers(result.items); setSelectedTool(""); setOutput(""); setNotice("Connection revoked and its stored token removed.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not revoke this MCP server."); }
-    finally { setBusy(false); }
+    try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : failure); } finally { setBusy(false); }
   }
 
-  async function test() {
+  const add = () => run(async () => {
+    const result = await api<McpListing & { added: string; skipped_tools: number }>(`${base}/servers`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), url: draft.url.trim(), bearer_token: draft.token }) });
+    setServers(result.items); setDraft({ name: "", url: "", token: "" }); setAdding(false); setSelected(result.added);
+    setNotice(`Server added. Read-only tools are allowed; review each write tool before allowing it.${result.skipped_tools ? ` ${result.skipped_tools} tool(s) were skipped because their names or input schemas are not supported.` : ""}`);
+  }, "Could not add this MCP server.");
+
+  const connect = () => run(async () => {
+    if (!server) return;
+    const result = await api<McpListing>(`${base}/${server.id}`, { method: "PUT", body: JSON.stringify({ bearer_token: token }) });
+    setServers(result.items); setToken(""); setOutput("");
+    setNotice("Server verified. Tool policies were kept for tools that still exist.");
+  }, "Could not connect this MCP server.");
+
+  const disconnect = () => run(async () => {
+    if (!server) return;
+    const result = await api<McpListing>(`${base}/${server.id}`, { method: "DELETE" });
+    setServers(result.items); setSelectedTool(""); setOutput("");
+    if (server.source === "workspace") setSelected(result.items[0]?.id || "");
+    setNotice(server.source === "workspace" ? "Server removed with its stored URL and token. Agents and workflows using it stop before their next call." : "Connection revoked and its stored token removed.");
+  }, "Could not revoke this MCP server.");
+
+  const setPolicy = (name: string, policy: "allow" | "block") => run(async () => {
+    if (!server) return;
+    const result = await api<McpListing>(`${base}/${server.id}/tools/${encodeURIComponent(name)}`, { method: "PATCH", body: JSON.stringify({ policy }) });
+    setServers(result.items);
+    setNotice(policy === "allow" ? `${name} is allowed. Agents and workflows must still be granted it explicitly.` : `${name} is blocked. Runs that use it stop before calling the server.`);
+  }, "Could not change this tool policy.");
+
+  const test = () => run(async () => {
     if (!server || !tool) return;
-    setBusy(true); setError(""); setOutput("");
-    try {
-      const parsed: unknown = JSON.parse(argumentsJson);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Arguments must be a JSON object.");
-      const result = await api<{ output: unknown }>(`${base}/${server.id}/tools/${encodeURIComponent(tool)}/test`, { method: "POST", body: JSON.stringify({ arguments: parsed }) });
-      setOutput(JSON.stringify(result.output, null, 2));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "MCP tool test failed."); }
-    finally { setBusy(false); }
-  }
+    setOutput("");
+    const parsed: unknown = JSON.parse(argumentsJson);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Arguments must be a JSON object.");
+    const result = await api<{ output: unknown }>(`${base}/${server.id}/tools/${encodeURIComponent(tool)}/test`, { method: "POST", body: JSON.stringify({ arguments: parsed }) });
+    setOutput(JSON.stringify(result.output, null, 2));
+  }, "MCP tool test failed.");
+
+  const addForm = <div className="mcp-detail">
+    <h3>Add an MCP server</h3>
+    <p>Use the server&apos;s Streamable HTTP endpoint on a public HTTPS host. FlowForge lists its tools; only tools the server marks read-only start allowed.</p>
+    {error && <ErrorNotice message={error} />}
+    <div className="mcp-credential">
+      <label htmlFor="mcp-name">Name</label>
+      <input id="mcp-name" value={draft.name} maxLength={100} disabled={busy} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Issue tracker" />
+      <label htmlFor="mcp-url">Server URL <small>Stored encrypted: some services put a key in the URL</small></label>
+      <input id="mcp-url" type="url" value={draft.url} maxLength={2048} disabled={busy} spellCheck={false} autoComplete="off" onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://mcp.example.com/mcp" />
+      <label htmlFor="mcp-new-token">Bearer token <small>Leave blank for a public server</small></label>
+      <div className="integration-key-row"><div className="integration-key-input"><KeyRound size={16} /><input id="mcp-new-token" type="password" autoComplete="off" value={draft.token} disabled={busy} onChange={(event) => setDraft({ ...draft, token: event.target.value })} placeholder="Optional server token" /></div>
+        <Button disabled={busy || !draft.name.trim() || !draft.url.trim()} onClick={add}>{busy ? <LoaderCircle size={15} className="spin" /> : <ShieldCheck size={15} />}Add and verify</Button></div>
+      <p>OAuth sign-in is not supported yet; use servers that accept an API key or no authentication.</p>
+    </div>
+  </div>;
 
   return <section className="panel mcp-panel">
-    <div className="mcp-heading"><div><span className="integration-eyebrow">REMOTE CAPABILITIES</span><h2>MCP servers</h2><p>Connect a reviewed external service and inspect its approved read-only tools.</p></div><Badge tone="purple">{servers.filter((item) => item.state === "active").length} connected</Badge></div>
-    {!servers.length ? <div className="mcp-empty"><Globe2 size={24} /><div><strong>No MCP servers are configured</strong><p>A platform operator must add and review an HTTPS server before workspaces can connect it.</p></div></div> : <div className="mcp-layout">
-      <div className="mcp-server-list">{servers.map((item) => <button type="button" key={item.id} className={selected === item.id ? "selected" : ""} onClick={() => { setSelected(item.id); setToken(""); setSelectedTool(""); setOutput(""); setError(""); setNotice(""); }}><Globe2 size={18} /><span><strong>{item.name}</strong><small>{item.state === "active" ? `${item.verified_tools.length} approved tools` : "Not connected"}</small></span><Badge tone={item.state === "active" ? "green" : "amber"}>{item.state === "active" ? "Connected" : "Available"}</Badge></button>)}</div>
-      {server && <div className="mcp-detail">
+    <div className="mcp-heading"><div><span className="integration-eyebrow">REMOTE CAPABILITIES</span><h2>MCP servers</h2><p>Connect external tools for agents and workflows. Read-only tools start allowed; write tools stay blocked until an owner or admin allows them.</p></div>
+      <div className="row"><Badge tone="purple">{servers.filter((item) => item.state === "active").length} connected</Badge>{canAdd && <Button variant="outline" disabled={busy} onClick={() => { setAdding(true); setError(""); setNotice(""); }}><Plus size={14} />Add server</Button>}</div></div>
+    {!servers.length && !adding ? <div className="mcp-empty"><Globe2 size={24} /><div><strong>No MCP servers yet</strong><p>{canAdd ? "Add a server with Add server above." : initial.workspace_servers ? "An owner or admin can add a server." : "This installation only permits servers reviewed by a platform operator."}</p></div></div> : <div className="mcp-layout">
+      <div className="mcp-server-list">{servers.map((item) => <button type="button" key={item.id} className={!adding && selected === item.id ? "selected" : ""} onClick={() => choose(item.id)}><Globe2 size={18} /><span><strong>{item.name}</strong><small>{item.state === "active" ? `${item.runnable_tools.length} of ${item.verified_tools.length} tools allowed` : "Not connected"}{item.source === "workspace" ? " · added by workspace" : " · operator reviewed"}</small></span><Badge tone={item.state === "active" ? "green" : "amber"}>{item.state === "active" ? "Connected" : "Available"}</Badge></button>)}</div>
+      {adding ? addForm : server && <div className="mcp-detail">
         <div className="row between"><h3>{server.name}</h3><Badge tone={server.state === "active" ? "green" : "amber"}>{server.state === "active" ? "Verified" : "Awaiting connection"}</Badge></div>
-        <p>Allowed tools: {server.allowed_tools.join(", ")}. Workflow-ready read-only tools: {server.runnable_tools?.join(", ") || "none"}. Remote descriptions do not grant additional permissions.</p>
+        <p>{server.source === "workspace" ? `Added by this workspace · ${server.origin}` : "Reviewed by a platform operator"}. Remote descriptions and labels come from the server and do not grant permissions by themselves.</p>
         {error && <ErrorNotice message={error} />}
         {notice && <div className="integration-notice"><Check size={16} /> {notice}</div>}
-        {canManage && <div className="mcp-credential"><label htmlFor="mcp-token">Bearer token <small>Leave blank for a public server</small></label><div className="integration-key-row"><div className="integration-key-input"><KeyRound size={16} /><input id="mcp-token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Optional server token" /></div><Button disabled={busy} onClick={connect}>{busy ? <LoaderCircle size={15} className="spin" /> : <ShieldCheck size={15} />}{server.state === "active" ? "Verify or rotate" : "Connect server"}</Button></div>{server.state === "active" && <button className="mcp-revoke" type="button" disabled={busy} onClick={disconnect}>Revoke connection</button>}</div>}
-        {server.state === "active" && <div className="mcp-test"><h4>Test approved tool</h4><label htmlFor="mcp-tool">Tool</label><select id="mcp-tool" value={tool} onChange={(event) => { setSelectedTool(event.target.value); setOutput(""); }}>{server.verified_tools.map((name) => <option key={name} value={name}>{name}</option>)}</select><label htmlFor="mcp-arguments">Arguments JSON</label><textarea id="mcp-arguments" className="run-input" spellCheck={false} value={argumentsJson} onChange={(event) => setArgumentsJson(event.target.value)} /><Button disabled={busy || !canTest || !tool} onClick={test}>Run tool test</Button>{output && <><label htmlFor="mcp-output">Response JSON</label><pre id="mcp-output" className="tool-output">{output}</pre></>}</div>}
+        {server.state === "active" && <div className="mcp-test"><h4>Tools</h4>
+          {server.tools.map((item) => { const [kind, tone] = toolKind(item); return <div className="row between" key={item.name}>
+            <div><strong>{item.name}</strong> <Badge tone={tone}>{kind}</Badge>{item.description && <p>{item.description}</p>}</div>
+            {canManage && server.policy_editable ? <select aria-label={`Policy for ${item.name}`} value={item.policy} disabled={busy} onChange={(event) => setPolicy(item.name, event.target.value as "allow" | "block")}><option value="allow">Allow</option><option value="block">Block</option></select> : <Badge tone={item.policy === "allow" ? "green" : "neutral"}>{item.policy === "allow" ? "Allowed" : "Blocked"}</Badge>}
+          </div>; })}
+          {canManage && server.policy_editable && <p>Allowing a write tool lets granted agents and published workflows act on the external service. Put a Human approval step before it in a workflow when a person should review each action.</p>}
+        </div>}
+        {canManage && <div className="mcp-credential"><label htmlFor="mcp-token">Bearer token <small>Leave blank for a public server</small></label><div className="integration-key-row"><div className="integration-key-input"><KeyRound size={16} /><input id="mcp-token" type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="Optional server token" /></div><Button disabled={busy} onClick={connect}>{busy ? <LoaderCircle size={15} className="spin" /> : <ShieldCheck size={15} />}{server.state === "active" ? "Verify or rotate" : "Connect server"}</Button></div>{server.state === "active" && <button className="mcp-revoke" type="button" disabled={busy} onClick={disconnect}>{server.source === "workspace" ? "Remove server" : "Revoke connection"}</button>}</div>}
+        {server.state === "active" && <div className="mcp-test"><h4>Test a tool</h4>{testable.length ? <><label htmlFor="mcp-tool">Tool</label><select id="mcp-tool" value={tool} onChange={(event) => { setSelectedTool(event.target.value); setOutput(""); }}>{testable.map((name) => <option key={name} value={name}>{name}</option>)}</select><label htmlFor="mcp-arguments">Arguments JSON</label><textarea id="mcp-arguments" className="run-input" spellCheck={false} value={argumentsJson} onChange={(event) => setArgumentsJson(event.target.value)} />{server.tools.find((item) => item.name === tool)?.read_only === false && <p>This tool is not marked read-only. A test makes a real call that may change data.</p>}<Button disabled={busy || !canTest || !tool} onClick={test}>Run tool test</Button>{output && <><label htmlFor="mcp-output">Response JSON</label><pre id="mcp-output" className="tool-output">{output}</pre></>}</> : <p>No allowed tools you can test. Write tools run from agents or published workflows.</p>}</div>}
       </div>}
     </div>}
   </section>;

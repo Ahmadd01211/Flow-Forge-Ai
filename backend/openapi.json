@@ -1887,6 +1887,38 @@
         "title": "McpGrant",
         "type": "object"
       },
+      "McpServerCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "bearer_token": {
+            "default": "",
+            "format": "password",
+            "maxLength": 4096,
+            "title": "Bearer Token",
+            "type": "string",
+            "writeOnly": true
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 9,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "title": "McpServerCreate",
+        "type": "object"
+      },
       "McpToolInput": {
         "additionalProperties": false,
         "properties": {
@@ -1897,6 +1929,24 @@
           }
         },
         "title": "McpToolInput",
+        "type": "object"
+      },
+      "McpToolPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "policy": {
+            "enum": [
+              "allow",
+              "block"
+            ],
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy"
+        ],
+        "title": "McpToolPolicy",
         "type": "object"
       },
       "ModelCapability": {
@@ -7569,6 +7619,57 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/mcp/servers": {
+      "post": {
+        "operationId": "add_server_api_v1_workspaces__workspace_id__mcp_servers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpServerCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Server",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/mcp/{server_id}": {
       "delete": {
         "operationId": "disconnect_server_api_v1_workspaces__workspace_id__mcp__server_id__delete",
@@ -7672,6 +7773,75 @@
           }
         },
         "summary": "Connect Server",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/mcp/{server_id}/tools/{tool_name}": {
+      "patch": {
+        "operationId": "set_tool_policy_api_v1_workspaces__workspace_id__mcp__server_id__tools__tool_name__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "server_id",
+            "required": true,
+            "schema": {
+              "title": "Server Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tool_name",
+            "required": true,
+            "schema": {
+              "title": "Tool Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpToolPolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Tool Policy",
         "tags": [
           "mcp"
         ]

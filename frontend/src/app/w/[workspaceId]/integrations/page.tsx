@@ -1,5 +1,5 @@
 import { ProviderConnection } from "@/features/workspace/provider-connection";
-import { McpConnections, type McpServer } from "@/features/workspace/mcp-connections";
+import { McpConnections, type McpListing } from "@/features/workspace/mcp-connections";
 import { serverApi } from "@/lib/api/server";
 import type { ConnectionList, SessionData } from "@/lib/api/types";
 
@@ -12,7 +12,7 @@ export default async function Page({
   const [connections, session, mcp] = await Promise.all([
     serverApi<ConnectionList>(`/workspaces/${workspaceId}/integrations`),
     serverApi<SessionData>("/auth/session"),
-    serverApi<{ items: McpServer[] }>(`/workspaces/${workspaceId}/mcp`),
+    serverApi<McpListing>(`/workspaces/${workspaceId}/mcp`),
   ]);
   const role = session.workspaces.find((w) => w.id === workspaceId)?.role;
   return <>
@@ -21,6 +21,6 @@ export default async function Page({
       connections={connections.items}
       canManage={role === "owner" || role === "admin"}
     />
-    <McpConnections workspaceId={workspaceId} initialServers={mcp.items} canManage={role === "owner" || role === "admin"} canTest={role !== "viewer"} />
+    <McpConnections workspaceId={workspaceId} initial={mcp} canManage={role === "owner" || role === "admin"} canTest={role !== "viewer"} />
   </>;
 }

@@ -1,4 +1,9 @@
-"""Operator-owned MCP allowlist; tenants never submit network destinations."""
+"""Operator MCP policy: a reviewed server allowlist, and whether workspaces may add their own.
+
+MCP_CATALOG_JSON is either a list of servers (workspace servers allowed) or
+{"servers": [...], "workspace_servers": false} for installs that only permit reviewed servers.
+Every destination, operator or workspace, must be a public HTTPS host.
+"""
 
 import ipaddress
 import json
@@ -12,11 +17,54 @@ IDENTIFIER = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 TOOL_NAME = re.compile(r"^[a-zA-Z0-9_.-]{1,80}$")
 
 
-def catalog(raw: str) -> dict[str, dict]:
+def _policy(raw: str) -> tuple[list, bool]:
     try:
-        entries = json.loads(raw)
+        document = json.loads(raw)
     except ValueError:
         fail(503, "MCP_CATALOG_INVALID", "MCP catalog configuration is invalid.")
+    if isinstance(document, dict):
+        if set(document) - {"servers", "workspace_servers"} or not isinstance(
+            document.get("workspace_servers", True), bool
+        ):
+            fail(503, "MCP_CATALOG_INVALID", "MCP catalog configuration is invalid.")
+        return document.get("servers", []), document.get("workspace_servers", True)
+    return document, True
+
+
+def workspace_servers_allowed(raw: str) -> bool:
+    return _policy(raw)[1]
+
+
+def check_url(url, status=503, code="MCP_CATALOG_INVALID") -> str:
+    """Return the URL when it names a public HTTPS host on the default port."""
+    try:
+        parsed = urlsplit(url) if isinstance(url, str) else None
+        port = parsed.port if parsed else None
+    except ValueError:
+        parsed = None
+    hostname = (parsed.hostname or "").lower() if parsed else ""
+    if (
+        not parsed
+        or len(url) > 2048
+        or parsed.scheme != "https"
+        or port not in (None, 443)
+        or parsed.username
+        or parsed.password
+        or parsed.fragment
+        or not hostname
+        or hostname in {"localhost", "localhost.localdomain"}
+        or hostname.endswith((".local", ".internal", ".localhost"))
+    ):
+        fail(status, code, "MCP endpoints must use public HTTPS hosts.")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return url
+    fail(status, code, "MCP endpoints cannot use IP literals.")
+
+
+def catalog(raw: str) -> dict[str, dict]:
+    entries = _policy(raw)[0]
     if not isinstance(entries, list) or len(entries) > 10 or len(raw.encode()) > 8192:
         fail(503, "MCP_CATALOG_INVALID", "MCP catalog configuration is invalid.")
     result = {}
@@ -34,29 +82,7 @@ def catalog(raw: str) -> dict[str, dict]:
             fail(503, "MCP_CATALOG_INVALID", "MCP server IDs must be unique slugs.")
         if not isinstance(name, str) or not 1 <= len(name) <= 100 or not isinstance(url, str):
             fail(503, "MCP_CATALOG_INVALID", "MCP catalog configuration is invalid.")
-        try:
-            parsed = urlsplit(url)
-            port = parsed.port
-        except ValueError:
-            fail(503, "MCP_CATALOG_INVALID", "MCP endpoint URL is invalid.")
-        hostname = parsed.hostname or ""
-        if (
-            parsed.scheme != "https"
-            or port not in (None, 443)
-            or parsed.username
-            or parsed.password
-            or parsed.fragment
-            or not hostname
-            or hostname.lower() in {"localhost", "localhost.localdomain"}
-            or hostname.lower().endswith((".local", ".internal", ".localhost"))
-        ):
-            fail(503, "MCP_CATALOG_INVALID", "MCP endpoints must use public HTTPS hosts.")
-        try:
-            ipaddress.ip_address(hostname)
-        except ValueError:
-            pass
-        else:
-            fail(503, "MCP_CATALOG_INVALID", "MCP endpoints cannot use IP literals.")
+        check_url(url)
         if (
             not isinstance(allowed, list)
             or not 1 <= len(allowed) <= 20
@@ -67,7 +93,7 @@ def catalog(raw: str) -> dict[str, dict]:
         read_only = entry.get("read_only_tools", [])
         if not isinstance(read_only, list) or any(not isinstance(tool, str) or tool not in allowed for tool in read_only) or len(set(read_only)) != len(read_only):
             fail(503, "MCP_CATALOG_INVALID", "MCP read-only allowlist is invalid.")
-        result[server_id] = entry
+        result[server_id] = {**entry, "source": "catalog"}
     return result
 
 

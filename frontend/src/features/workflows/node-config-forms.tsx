@@ -995,7 +995,7 @@ function McpToolForm({ node, issues, onChange, context }: FormProps) {
             onChange({ server_id, tool_name });
           }}
         >
-          <option value=":">Choose a connected read-only tool</option>
+          <option value=":">Choose an allowed MCP tool</option>
           {context.mcpOptions.flatMap((server) =>
             server.runnable_tools.map((tool) => (
               <option

@@ -132,7 +132,7 @@ export function NodeTestPanel({ workspaceId, workflowId, graph, node, tests, set
           <div>
             <p><strong>This test calls {externalTarget}.</strong> {node.type === "agent"
               ? "It becomes a normal agent run: the agent's budget and the workspace limit of two active runs apply, and usage is recorded."
-              : "Read-only tools only. Tests share the 20-per-minute MCP limit and are recorded in the audit log."}</p>
+              : "Only read-only tools can be tested here; write tools run in a published workflow. Tests share the 20-per-minute MCP limit and are recorded in the audit log."}</p>
             <label className="checkbox-row">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
               I want to make this external call

@@ -7,7 +7,7 @@ from app.core.db import get_db
 from app.core.errors import fail
 from app.modules.identity.service import check_csrf
 from app.modules.mcp import service
-from app.modules.mcp.schemas import McpCredential, McpToolInput
+from app.modules.mcp.schemas import McpCredential, McpServerCreate, McpToolInput, McpToolPolicy
 from app.modules.workspaces.service import authorize
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/mcp", tags=["mcp"])
@@ -17,6 +17,44 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/mcp", tags=["mcp"])
 def list_servers(workspace_id: uuid.UUID, request: Request, db: Session = Depends(get_db)):
     authorize(request, db, workspace_id)
     return service.listing(db, workspace_id, request.app.state.settings.mcp_catalog_json)
+
+
+def manager(request, db, workspace_id, action):
+    _, member = authorize(request, db, workspace_id, write=True)
+    if member.role not in ("owner", "admin"):
+        fail(403, "FORBIDDEN", f"An owner or admin must {action}.")
+    return member
+
+
+@router.post("/servers", status_code=201, dependencies=[Depends(check_csrf)])
+def add_server(
+    workspace_id: uuid.UUID,
+    body: McpServerCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    member = manager(request, db, workspace_id, "add MCP servers")
+    settings = request.app.state.settings
+    return service.add_server(
+        db, workspace_id, member.user_id, settings.mcp_catalog_json,
+        settings.credential_key_path, body,
+    )
+
+
+@router.patch("/{server_id}/tools/{tool_name}", dependencies=[Depends(check_csrf)])
+def set_tool_policy(
+    workspace_id: uuid.UUID,
+    server_id: str,
+    tool_name: str,
+    body: McpToolPolicy,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    member = manager(request, db, workspace_id, "change MCP tool policies")
+    return service.set_policy(
+        db, workspace_id, member.user_id, request.app.state.settings.mcp_catalog_json,
+        server_id, tool_name, body.policy,
+    )
 
 
 @router.put("/{server_id}", dependencies=[Depends(check_csrf)])
@@ -65,7 +103,7 @@ def test_remote_tool(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    authorize(request, db, workspace_id, write=True)
+    _, member = authorize(request, db, workspace_id, write=True)
     service.check_test_rate(request.app.state.redis, workspace_id)
     return service.test_tool(
         db,
@@ -75,4 +113,5 @@ def test_remote_tool(
         server_id,
         tool_name,
         body.arguments,
+        manager=member.role in ("owner", "admin"),
     )

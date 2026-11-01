@@ -132,7 +132,7 @@ export default function Landing() {
             </div>
             <div className="visual-footer">
               <span>
-                <ShieldCheck size={13} /> Read-only tools
+                <ShieldCheck size={13} /> Policy-controlled tools
               </span>
               <span>
                 60s timeout <span>·</span> $0.10 budget cap

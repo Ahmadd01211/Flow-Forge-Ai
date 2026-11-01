@@ -986,6 +986,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/mcp/servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Server */
+        post: operations["add_server_api_v1_workspaces__workspace_id__mcp_servers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/mcp/{server_id}": {
         parameters: {
             query?: never;
@@ -1002,6 +1019,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/mcp/{server_id}/tools/{tool_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set Tool Policy */
+        patch: operations["set_tool_policy_api_v1_workspaces__workspace_id__mcp__server_id__tools__tool_name__patch"];
         trace?: never;
     };
     "/api/v1/workspaces/{workspace_id}/mcp/{server_id}/tools/{tool_name}/test": {
@@ -2380,12 +2414,33 @@ export interface components {
             /** Tool Name */
             tool_name: string;
         };
+        /** McpServerCreate */
+        McpServerCreate: {
+            /**
+             * Bearer Token
+             * Format: password
+             * @default
+             */
+            bearer_token: string;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
         /** McpToolInput */
         McpToolInput: {
             /** Arguments */
             arguments?: {
                 [key: string]: unknown;
             };
+        };
+        /** McpToolPolicy */
+        McpToolPolicy: {
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "allow" | "block";
         };
         /** ModelCapability */
         ModelCapability: {
@@ -5507,6 +5562,41 @@ export interface operations {
             };
         };
     };
+    add_server_api_v1_workspaces__workspace_id__mcp_servers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpServerCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     connect_server_api_v1_workspaces__workspace_id__mcp__server_id__put: {
         parameters: {
             query?: never;
@@ -5554,6 +5644,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_tool_policy_api_v1_workspaces__workspace_id__mcp__server_id__tools__tool_name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                server_id: string;
+                tool_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpToolPolicy"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

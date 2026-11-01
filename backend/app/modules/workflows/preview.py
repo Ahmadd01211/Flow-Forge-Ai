@@ -16,7 +16,7 @@ from app.core.json_contracts import bounded_json, example_errors
 from app.modules.agents.models import AgentVersion
 from app.modules.executions.service import MODEL_PRICES
 from app.modules.integrations.models import IntegrationConnection
-from app.modules.mcp.catalog import catalog
+from app.modules.mcp import registry
 from app.modules.mcp.models import McpConnection
 from app.modules.mcp.service import schema_hash
 from app.modules.tools.catalog import CATALOG, invoke
@@ -130,7 +130,7 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
             select(ToolInstallation.tool_key).where(ToolInstallation.workspace_id == workspace_id)
         )
     )
-    approved_servers = catalog(mcp_catalog_json)
+    approved_servers = registry.servers(db, workspace_id, mcp_catalog_json)
     for node in graph.nodes:
         upstream = _upstream(graph, node.id) if node.type == "result" else None
         config_errors, config_warnings = config_issues(
@@ -185,12 +185,12 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
             connection = db.scalar(select(McpConnection).where(
                 McpConnection.workspace_id == workspace_id, McpConnection.server_id == server_id,
             )) if profile and isinstance(tool_name, str) else None
-            snapshot = next((item for item in connection.tool_snapshots if item["name"] == tool_name), None) if connection and connection.state == "active" else None
-            valid = bool(profile and tool_name in profile.get("read_only_tools", []) and connection and connection.state == "active" and tool_name in connection.verified_tools and snapshot)
+            snapshot = registry.snapshot(connection, tool_name)
+            valid = registry.runnable(profile, connection, tool_name)
             if valid and ("connection_generation" in node.config or "input_schema_hash" in node.config):
                 valid = node.config.get("connection_generation") == connection.generation and node.config.get("input_schema_hash") == schema_hash(snapshot["input_schema"])
             if not valid:
-                result["errors"].append({"code": "MCP_TOOL_UNAVAILABLE", "message": "Connect an operator-approved read-only MCP tool, or republish after its connection changes.", "node_id": node.id, "edge_id": None, "path": "config.tool_name"})
+                result["errors"].append({"code": "MCP_TOOL_UNAVAILABLE", "message": "Connect this MCP server and allow the tool, or republish after its connection changes.", "node_id": node.id, "edge_id": None, "path": "config.tool_name"})
             continue
         if node.type == "agent":
             try:
