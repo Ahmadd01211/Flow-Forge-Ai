@@ -254,7 +254,10 @@ def test_client_reads_real_sdk_types(monkeypatch):
             ])
 
         async def call_tool(self, name, arguments):
-            return types.CallToolResult(content=[types.TextContent(type="text", text="no")], is_error=True)
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text="no")], is_error=True,
+                _meta={"io.modelcontextprotocol/serverInfo": {"icons": [{"src": "data:image/png;base64,AAAA"}]}},
+            )
 
     monkeypatch.setattr(mcp_client, "_call", lambda url, key, action, timeout_seconds=12.0: asyncio.run(action(FakeClient())))
     assert mcp_client.discover("https://mcp.example.com/mcp", "") == [
@@ -263,6 +266,7 @@ def test_client_reads_real_sdk_types(monkeypatch):
     ]
     result = mcp_client.call_tool("https://mcp.example.com/mcp", "", "post", {})
     assert result["isError"] is True and result["content"][0]["text"] == "no"
+    assert "_meta" not in result and "base64" not in json.dumps(result)
 
 
 def test_any_of_tools_are_kept_and_annotations_removed(client, owner, db, monkeypatch):

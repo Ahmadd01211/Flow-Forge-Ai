@@ -106,8 +106,11 @@ def call_tool(url: str, key: str, name: str, arguments: dict, timeout_seconds: f
 
     async def action(client):
         result = await client.call_tool(name, arguments)
-        # Wire-format (camelCase) keys: callers check isError and structuredContent.
-        return result.model_dump(mode="json", by_alias=True, exclude_none=True)
+        # Wire-format (camelCase) keys: callers check isError and structuredContent. Server
+        # metadata (`_meta`, e.g. GitHub's base64 icons) would cost tokens on every agent call.
+        return result.model_dump(
+            mode="json", by_alias=True, exclude_none=True, exclude={"meta"}
+        )
 
     result = _call(url, key, action, timeout_seconds)
     bounded_json(result, max_bytes=65536)
