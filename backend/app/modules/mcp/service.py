@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.credentials import encrypt_secret, load_master_key
 from app.core.errors import fail
-from app.core.json_contracts import validate_user_schema
+from app.core.json_contracts import sanitize_tool_schema, validate_user_schema
 from app.modules.audit.service import record
 from app.modules.mcp import registry
 from app.modules.mcp.catalog import TOOL_NAME, check_url, workspace_servers_allowed
@@ -92,8 +92,9 @@ def _compatible(remote_tools: list[dict]) -> tuple[list[dict], int]:
     for tool in remote_tools:
         if not TOOL_NAME.fullmatch(tool["name"]):
             continue
+        tool = {**tool, "input_schema": sanitize_tool_schema(tool["input_schema"])}
         try:
-            validate_user_schema(tool["input_schema"])
+            validate_user_schema(tool["input_schema"], tool=True)
         except HTTPException:
             continue
         usable.append(tool)
@@ -131,11 +132,15 @@ def connect(
     else:
         url = item["url"]
         snapshots = sorted(
-            (tool for tool in discover(url, token) if tool["name"] in item["allowed_tools"]),
+            (
+                {**tool, "input_schema": sanitize_tool_schema(tool["input_schema"])}
+                for tool in discover(url, token)
+                if tool["name"] in item["allowed_tools"]
+            ),
             key=lambda tool: tool["name"],
         )
         for tool in snapshots:
-            validate_user_schema(tool["input_schema"])
+            validate_user_schema(tool["input_schema"], tool=True)
     if not snapshots:
         fail(422, "MCP_TOOLS_UNAVAILABLE", "No usable tools were found on this MCP server.")
     db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update())

@@ -10,6 +10,16 @@ Until this slice, MCP servers could only come from the operator's `MCP_CATALOG_J
 4. In the agent editor, grant allowed tools to an agent and publish. In the workflow builder, use an **MCP tool** step. To have a person review each action, put a **Human approval** step before it.
 5. Owners and admins can test any allowed tool from the server panel. Editors can test only read-only tools; write tools otherwise run from agents or published workflows.
 
+## Connect GitHub
+
+GitHub hosts an MCP server at `https://api.githubcopilot.com/mcp/`, with one URL per toolset (`/x/issues`, `/x/pull_requests`, `/x/repos`, `/x/actions` and so on) and a `/readonly` variant of each. In **Add server**, choose **GitHub**, pick a toolset and leave **Read-only tools only** on to start.
+
+1. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) restricted to the repositories this workspace needs, with only the permissions you plan to allow, for example Issues: read.
+2. Paste it in the token field and select **Add and verify**. GitHub labels its tools, so read tools start allowed.
+3. For write actions such as creating issues, choose a toolset without `/readonly`, give the token the matching write permission, and allow each write tool deliberately.
+
+A missing, malformed or rejected token is reported as `MCP_AUTH_FAILED`. GitHub answers a malformed token with HTTP 400 and an RFC 6750 `invalid_token` challenge rather than 401, so the client checks the challenge header as well as the status. Using GitHub through OAuth sign-in needs a registered GitHub OAuth App, because GitHub's authorization server does not offer dynamic client registration. That belongs to the OAuth slice.
+
 ## Policy rules
 
 | Tool | Default | Who can change it |
@@ -28,7 +38,7 @@ Every decision is in the activity log as `mcp.server_added`, `mcp.connected`, `m
 - Only public HTTPS hosts on port 443 are accepted. IP literals, `localhost`, `.local` and `.internal` names, and URLs containing user credentials are rejected. DNS is re-checked before every connection, and addresses that resolve to private networks are blocked. Production still needs an egress policy, because a DNS answer can change between the check and the connection.
 - Some services, such as Zapier, embed a key in the URL path. The full URL is therefore encrypted together with the token using the workspace credential key. The database, listings and audit events keep only the `https://host` origin.
 - Rotating a token re-lists the tools and keeps policies for tools that still exist. Removing a server deletes its stored URL and token; agents and workflows that use it stop before their next call. To use it again, add it again.
-- Tools whose names or input schemas FlowForge does not support are skipped, and the add result says how many were skipped. The schema subset excludes `anyOf`, `$ref` and `pattern`, so some real tools (for example DeepWiki's `ask_wiki_question`) are skipped for now.
+- Tool lists are read page by page, up to 250 tools. Documentation-only schema keywords (`default`, `format`, `examples` and similar) are removed. `pattern` is removed too, because a remote regular expression would otherwise run in FlowForge's validator; the server still enforces it. `anyOf`/`oneOf` alternatives are supported. Tools whose names or schemas remain unsupported, such as those using `$ref`, are skipped, and the add result says how many.
 - A workspace can add up to 20 servers.
 
 ## Locked-down installs

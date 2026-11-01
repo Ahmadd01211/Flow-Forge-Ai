@@ -50,7 +50,7 @@ def pin(db, workspace_id, grants, raw_catalog):
     result = []
     for grant in grants:
         _, row, snapshot = resolve(db, workspace_id, grant, raw_catalog)
-        validate_user_schema(snapshot["input_schema"])
+        validate_user_schema(snapshot["input_schema"], tool=True)
         result.append(
             {
                 "server_id": grant["server_id"],

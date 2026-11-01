@@ -5,6 +5,7 @@ import { Check, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck } from "lucide
 import { Badge, ErrorNotice } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
+import { DEEPWIKI_MCP_URL, GITHUB_TOOLSETS, githubMcpName, githubMcpUrl, type GithubToolset } from "@/features/workspace/mcp-presets";
 
 export interface McpTool {
   name: string;
@@ -56,6 +57,9 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
   const [selected, setSelected] = useState(initial.items[0]?.id || "");
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: "", url: "", token: "" });
+  const [preset, setPreset] = useState<"" | "github">("");
+  const [githubToolset, setGithubToolset] = useState<GithubToolset>("");
+  const [githubReadOnly, setGithubReadOnly] = useState(true);
   const [token, setToken] = useState("");
   const [selectedTool, setSelectedTool] = useState("");
   const [argumentsJson, setArgumentsJson] = useState("{}");
@@ -69,6 +73,11 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
   const base = `/workspaces/${workspaceId}/mcp`;
   const canAdd = canManage && initial.workspace_servers;
 
+  function chooseGithub(toolset: GithubToolset, readOnly: boolean) {
+    setGithubToolset(toolset); setGithubReadOnly(readOnly);
+    setDraft((current) => ({ ...current, name: githubMcpName(toolset, readOnly), url: githubMcpUrl(toolset, readOnly) }));
+  }
+
   function choose(id: string) {
     setSelected(id); setAdding(false); setToken(""); setSelectedTool(""); setOutput(""); setError(""); setNotice("");
   }
@@ -80,7 +89,7 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
 
   const add = () => run(async () => {
     const result = await api<McpListing & { added: string; skipped_tools: number }>(`${base}/servers`, { method: "POST", body: JSON.stringify({ name: draft.name.trim(), url: draft.url.trim(), bearer_token: draft.token }) });
-    setServers(result.items); setDraft({ name: "", url: "", token: "" }); setAdding(false); setSelected(result.added);
+    setServers(result.items); setDraft({ name: "", url: "", token: "" }); setPreset(""); setAdding(false); setSelected(result.added);
     setNotice(`Server added. Read-only tools are allowed; review each write tool before allowing it.${result.skipped_tools ? ` ${result.skipped_tools} tool(s) were skipped because their names or input schemas are not supported.` : ""}`);
   }, "Could not add this MCP server.");
 
@@ -120,14 +129,25 @@ export function McpConnections({ workspaceId, initial, canManage, canTest }: {
     <p>Use the server&apos;s Streamable HTTP endpoint on a public HTTPS host. FlowForge lists its tools; only tools the server marks read-only start allowed.</p>
     {error && <ErrorNotice message={error} />}
     <div className="mcp-credential">
+      <span className="integration-eyebrow">QUICK SETUP</span>
+      <div className="row">
+        <button type="button" className="chip-button" disabled={busy} onClick={() => { setPreset("github"); setDraft({ ...draft, name: githubMcpName(githubToolset, githubReadOnly), url: githubMcpUrl(githubToolset, githubReadOnly) }); }}>GitHub</button>
+        <button type="button" className="chip-button" disabled={busy} onClick={() => { setPreset(""); setDraft({ name: "DeepWiki", url: DEEPWIKI_MCP_URL, token: "" }); }}>DeepWiki (public, no token)</button>
+      </div>
+      {preset === "github" && <>
+        <label htmlFor="mcp-github-toolset">GitHub toolset</label>
+        <select id="mcp-github-toolset" value={githubToolset} disabled={busy} onChange={(event) => chooseGithub(event.target.value as GithubToolset, githubReadOnly)}>{GITHUB_TOOLSETS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+        <label><input type="checkbox" checked={githubReadOnly} disabled={busy} onChange={(event) => chooseGithub(githubToolset, event.target.checked)} /> Read-only tools only (recommended to start)</label>
+        <p>Create a <a className="text-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">fine-grained personal access token</a> limited to the repositories this workspace needs, with only the permissions you plan to allow, for example Issues: read, or Issues: read and write. Paste it below; it is stored encrypted.</p>
+      </>}
       <label htmlFor="mcp-name">Name</label>
       <input id="mcp-name" value={draft.name} maxLength={100} disabled={busy} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Issue tracker" />
       <label htmlFor="mcp-url">Server URL <small>Stored encrypted: some services put a key in the URL</small></label>
       <input id="mcp-url" type="url" value={draft.url} maxLength={2048} disabled={busy} spellCheck={false} autoComplete="off" onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://mcp.example.com/mcp" />
-      <label htmlFor="mcp-new-token">Bearer token <small>Leave blank for a public server</small></label>
+      <label htmlFor="mcp-new-token">{preset === "github" ? "GitHub personal access token" : "Bearer token"} <small>{preset === "github" ? "Required" : "Leave blank for a public server"}</small></label>
       <div className="integration-key-row"><div className="integration-key-input"><KeyRound size={16} /><input id="mcp-new-token" type="password" autoComplete="off" value={draft.token} disabled={busy} onChange={(event) => setDraft({ ...draft, token: event.target.value })} placeholder="Optional server token" /></div>
         <Button disabled={busy || !draft.name.trim() || !draft.url.trim()} onClick={add}>{busy ? <LoaderCircle size={15} className="spin" /> : <ShieldCheck size={15} />}Add and verify</Button></div>
-      <p>OAuth sign-in is not supported yet; use servers that accept an API key or no authentication.</p>
+      <p>OAuth sign-in is not supported yet; use servers that accept a token or no authentication.</p>
     </div>
   </div>;
 

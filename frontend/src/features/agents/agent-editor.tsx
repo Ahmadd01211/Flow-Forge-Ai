@@ -97,6 +97,7 @@ export function AgentEditor({
     name: string;
     runnable_tools: string[];
     runnable_schemas: Record<string, unknown>;
+    tools?: { name: string; read_only: boolean }[];
   }[];
 }) {
   const preferredConnection = connections.find(
@@ -747,7 +748,12 @@ export function AgentEditor({
                                 <strong>
                                   {server.name} / {name}
                                 </strong>
-                                <small>Read-only remote tool</small>
+                                <small>
+                                  {server.tools?.find((tool) => tool.name === name)
+                                    ?.read_only
+                                    ? "Read-only remote tool"
+                                    : "Can change data in the external service"}
+                                </small>
                               </span>
                             </label>
                             <details>

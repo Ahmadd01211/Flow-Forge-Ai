@@ -24,7 +24,7 @@ export default async function AgentDetail({
     serverApi<SessionData>("/auth/session"),
     serverApi<ConnectionList>(`/workspaces/${workspaceId}/integrations`),
     serverApi<{ items: ToolEntry[] }>(`/workspaces/${workspaceId}/tools`),
-    serverApi<{ items: { id: string; name: string; runnable_tools: string[]; runnable_schemas: Record<string, unknown> }[] }>(`/workspaces/${workspaceId}/mcp`),
+    serverApi<{ items: { id: string; name: string; runnable_tools: string[]; runnable_schemas: Record<string, unknown>; tools: { name: string; read_only: boolean }[] }[] }>(`/workspaces/${workspaceId}/mcp`),
     serverApi<{ items: HttpTool[] }>(`/workspaces/${workspaceId}/http-tools`),
     searchParams,
   ]);

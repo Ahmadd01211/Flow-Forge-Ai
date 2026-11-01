@@ -246,7 +246,7 @@ def test_client_reads_real_sdk_types(monkeypatch):
     """Regression: SDK 2.x exposes snake_case attributes; results must keep wire-format keys."""
 
     class FakeClient:
-        async def list_tools(self):
+        async def list_tools(self, cursor=None):
             return types.ListToolsResult(tools=[
                 types.Tool(name="search", input_schema={"type": "object"},
                            annotations=types.ToolAnnotations(read_only_hint=True, destructive_hint=False)),
@@ -263,3 +263,62 @@ def test_client_reads_real_sdk_types(monkeypatch):
     ]
     result = mcp_client.call_tool("https://mcp.example.com/mcp", "", "post", {})
     assert result["isError"] is True and result["content"][0]["text"] == "no"
+
+
+def test_any_of_tools_are_kept_and_annotations_removed(client, owner, db, monkeypatch):
+    ask = {
+        "type": "object",
+        "properties": {
+            "repoName": {"anyOf": [{"type": "string", "pattern": "^(a+)+$"}, {"type": "array", "items": {"type": "string"}}]},
+            "format": {"type": "string", "default": "md", "format": "uri"},
+        },
+        "required": ["repoName"],
+    }
+    base, body = add(client, owner, monkeypatch, tools=[*TOOLS, {"name": "ask", "input_schema": ask, "read_only_hint": True}])
+    assert body["skipped_tools"] == 2 and "ask" in item(body, body["added"])["runnable_tools"]
+    row = db.scalar(select(McpConnection).where(McpConnection.server_id == body["added"]))
+    stored = next(tool for tool in row.tool_snapshots if tool["name"] == "ask")["input_schema"]
+    # Property names that look like keywords survive; annotation keywords and regexes do not.
+    assert stored["properties"]["format"] == {"type": "string"}
+    assert stored["properties"]["repoName"]["anyOf"][0] == {"type": "string"}
+
+
+def test_client_follows_tool_pages_with_a_bound(monkeypatch):
+    pages = {None: ("p2", ["a", "b"]), "p2": ("p3", ["c"]), "p3": (None, ["d"])}
+
+    class Paged:
+        async def list_tools(self, cursor=None):
+            following, names = pages[cursor]
+            return types.ListToolsResult(
+                tools=[types.Tool(name=name, input_schema={"type": "object"}) for name in names],
+                next_cursor=following,
+            )
+
+    monkeypatch.setattr(mcp_client, "_call", lambda url, key, action, timeout_seconds=12.0: asyncio.run(action(Paged())))
+    assert [tool["name"] for tool in mcp_client.discover("https://mcp.example.com/mcp", "")] == ["a", "b", "c", "d"]
+    pages[None] = ("p2", [f"t{i}" for i in range(mcp_client.MAX_TOOLS + 1)])
+    try:
+        mcp_client.discover("https://mcp.example.com/mcp", "")
+    except Exception as error:
+        assert error.detail["code"] == "MCP_TOOL_LIST_INVALID"
+    else:
+        raise AssertionError("Oversized tool lists must be rejected")
+
+
+def test_rejected_token_is_reported_as_auth_failure(monkeypatch):
+    import httpx2
+
+    # GitHub answers a malformed token with 400 and an RFC 6750 invalid_token challenge.
+    def github(request):
+        return httpx2.Response(400, headers={"www-authenticate": 'Bearer error="invalid_token"'}, text="bad request")
+
+    real = httpx2.AsyncClient
+    monkeypatch.setattr(mcp_client, "require_public_dns", lambda _url: None)
+    monkeypatch.setattr(mcp_client.httpx2, "AsyncClient", lambda **kwargs: real(transport=httpx2.MockTransport(github), **kwargs))
+    for key, message in (("bad", "rejected the credentials"), ("", "requires a token")):
+        try:
+            mcp_client.discover("https://mcp.example.com/mcp", key)
+        except Exception as error:
+            assert error.detail["code"] == "MCP_AUTH_FAILED" and message in error.detail["message"], error.detail
+        else:
+            raise AssertionError("A rejected token must fail")
