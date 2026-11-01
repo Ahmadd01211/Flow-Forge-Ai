@@ -8,7 +8,9 @@ User templates: save a draft in the agent editor or visual workflow builder, the
 
 Provider capabilities: Integrations now shows backend-owned execution/tool support and estimated token rates for 11 reviewed model IDs across the five providers. Refresh a model list using the saved key without rotating it. Other provider-listed models remain labeled setup only. See [supported scope and provider sources](docs/learning/10-PROVIDER-CAPABILITIES.md).
 
-Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0022` at startup.
+Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0024` at startup.
+
+Calendar schedules: in **Triggers & schedules**, choose **Calendar (cron)** for rules such as `0 9 * * 1-5` in a chosen timezone, and preview the next five runs before saving. See [cron schedules and daylight-saving behavior](docs/learning/22-CRON-SCHEDULES.md).
 
 Accounts and teams: Settings now supports email verification, invitations, member roles/removal, ownership transfer, workspace creation/rename, password changes and signing out all devices. Password recovery starts from sign-in. Development emails appear at http://localhost:8025; configure SMTP for public delivery. See [accounts walkthrough](docs/learning/09-ACCOUNTS-AND-WORKSPACES.md) and [development phases](docs/DEVELOPMENT_PHASES.md).
 
@@ -34,10 +36,12 @@ The initializer preserves an existing `.env` and generates local secrets without
 - Agent authoring, immutable versions, regression examples and read-only MCP/HTTP grants.
 - Visual workflows with up to thirty direct steps/four agents, branches, merges, field mappings, bounded For each loops and pinned reusable workflow calls. Expansion is limited to three workflow levels, 120 steps and eight agent calls.
 - Durable runs with encrypted checkpoints, safe recovery, cancellation, local retry policies, explicit replay and step debugging.
-- Authenticated JSON webhooks, interval schedules, pinned deployment endpoints and shared usage/admission budgets.
+- Authenticated JSON webhooks, interval and cron schedules, pinned deployment endpoints and shared usage/admission budgets.
+- Durable human approvals and timers, plus an owner/admin activity log with JSON export.
+- Guided GitHub and Slack recipes on top of approved HTTP tools.
 - Admin-approved HTTPS API tools with encrypted reusable header credentials and durable workflow action receipts.
 - Ten starter templates, including a working child/batch pair and service actions, plus user saving/sharing and portable private JSON import/export.
-- Docker Compose, PostgreSQL migrations through 0022, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
+- Docker Compose, PostgreSQL migrations through 0024, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
 
 Open **Tool Registry → HTTP API tools** to connect a fixed destination. Agents receive reviewed read-only GET grants; write actions execute through published workflows. Credentials never belong in instructions or URLs. Model budgets exclude service API charges. See [API tools and template files](docs/learning/17-HTTP-API-TOOLS-AND-TEMPLATE-FILES.md).
 
@@ -45,7 +49,7 @@ To try a workflow, preview a starter in **Templates**, connect its required tool
 
 For another app, create a **Deployment** from a published version and keep its one-time key on your app server. Local endpoints use idempotent submission and scoped polling. No provider key is bundled: enter your own key in Integrations. Real provider/service calls may incur charges.
 
-The local milestone remains bounded. General while-loops, human approval waits, richer expressions, OAuth and guided vendor connectors remain on the [phase roadmap](docs/DEVELOPMENT_PHASES.md). Public hosting and subscription billing are outside this local-first pass. Real upstream acceptance, operator quotas, capacity isolation and security operations must be addressed before serving customers.
+The local milestone remains bounded. General while-loops, richer expressions, signed vendor webhooks, fine-grained permissions and OAuth remain on the [phase roadmap](docs/DEVELOPMENT_PHASES.md). Public hosting and subscription billing are outside this local-first pass. Real upstream acceptance, operator quotas, capacity isolation and security operations must be addressed before serving customers.
 
 Try the new composition phase using **Prepare a customer profile**, publish it, then connect its version in **Batch customer profiles**. Preview with the template's sample JSON and inspect item receipts in **Executions → Workflows**. See the [step-by-step walkthrough and design decisions](docs/learning/19-WORKFLOW-LOOPS-AND-SUBWORKFLOWS.md).
 

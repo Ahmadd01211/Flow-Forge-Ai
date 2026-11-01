@@ -623,6 +623,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/automations/schedule-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Schedule Preview */
+        get: operations["schedule_preview_api_v1_workspaces__workspace_id__automations_schedule_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/automations/{automation_id}": {
         parameters: {
             query?: never;
@@ -1705,6 +1722,8 @@ export interface components {
         };
         /** AutomationCreate */
         AutomationCreate: {
+            /** Cron Expression */
+            cron_expression?: string | null;
             /** Input */
             input?: {
                 [key: string]: unknown;
@@ -1718,6 +1737,8 @@ export interface components {
             kind: "webhook" | "schedule";
             /** Name */
             name: string;
+            /** Timezone */
+            timezone?: string | null;
             /**
              * Version Id
              * Format: uuid
@@ -1736,6 +1757,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Cron Expression */
+            cron_expression: string | null;
             /**
              * Id
              * Format: uuid
@@ -1763,6 +1786,8 @@ export interface components {
              * @enum {string}
              */
             state: "active" | "paused" | "archived";
+            /** Timezone */
+            timezone: string | null;
             /**
              * Version Id
              * Format: uuid
@@ -1776,6 +1801,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Cron Expression */
+            cron_expression: string | null;
             /**
              * Id
              * Format: uuid
@@ -1803,6 +1830,8 @@ export interface components {
              * @enum {string}
              */
             state: "active" | "paused" | "archived";
+            /** Timezone */
+            timezone: string | null;
             /**
              * Version Id
              * Format: uuid
@@ -2631,6 +2660,15 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /** SchedulePreview */
+        SchedulePreview: {
+            /** Cron Expression */
+            cron_expression: string;
+            /** Occurrences */
+            occurrences: string[];
+            /** Timezone */
+            timezone: string;
         };
         /** SharingUpdate */
         SharingUpdate: {
@@ -4551,6 +4589,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EligibleTriggers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_preview_api_v1_workspaces__workspace_id__automations_schedule_preview_get: {
+        parameters: {
+            query: {
+                cron_expression: string;
+                timezone?: string;
+            };
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulePreview"];
                 };
             };
             /** @description Validation Error */

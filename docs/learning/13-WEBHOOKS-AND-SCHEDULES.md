@@ -52,7 +52,7 @@ Use PostgreSQL rather than Celery Beat as the schedule authority: it already own
 
 Use explicit published-version bindings rather than following the draft/latest version: production automation changes must be intentional and reviewable. Reconsider optional version aliases only after adding audited promotion and rollback.
 
-The local limit is fifty unarchived bindings per workspace. Archive removes a binding from active lists and capacity counting while retaining run references/audit evidence. No automatic deletion of run history occurs. Cron expressions, calendar time zones, signed-provider receivers, payload transformations, dead-letter event inboxes and workspace monthly quotas remain future work.
+The local limit is fifty unarchived bindings per workspace. Archive removes a binding from active lists and capacity counting while retaining run references/audit evidence. No automatic deletion of run history occurs. Cron expressions with IANA timezones are now available; see [calendar schedules](22-CRON-SCHEDULES.md). Signed-provider receivers, payload transformations, dead-letter event inboxes and workspace monthly quotas remain future work.
 
 ## Tests
 

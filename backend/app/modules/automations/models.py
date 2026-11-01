@@ -16,6 +16,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
+# A schedule has exactly one cadence: a bounded interval, or a cron expression with its timezone.
+BINDING = (
+    "(kind='webhook' AND key_hash IS NOT NULL AND interval_seconds IS NULL"
+    " AND cron_expression IS NULL AND timezone IS NULL AND input_ciphertext IS NULL"
+    " AND next_due_at IS NULL)"
+    " OR (kind='schedule' AND key_hash IS NULL AND input_nonce IS NOT NULL"
+    " AND input_ciphertext IS NOT NULL AND next_due_at IS NOT NULL AND ("
+    "(interval_seconds IS NOT NULL AND interval_seconds BETWEEN 60 AND 86400"
+    " AND cron_expression IS NULL AND timezone IS NULL)"
+    " OR (interval_seconds IS NULL AND cron_expression IS NOT NULL AND timezone IS NOT NULL)))"
+)
+
 
 class WorkflowAutomation(Base):
     __tablename__ = "workflow_automation"
@@ -25,10 +37,7 @@ class WorkflowAutomation(Base):
             ["workspace_id", "version_id"], ["workflow_version.workspace_id", "workflow_version.id"]
         ),
         CheckConstraint("state IN ('active','paused','archived')", name="valid_automation_state"),
-        CheckConstraint(
-            "(kind='webhook' AND key_hash IS NOT NULL AND interval_seconds IS NULL AND input_ciphertext IS NULL AND next_due_at IS NULL) OR (kind='schedule' AND key_hash IS NULL AND interval_seconds IS NOT NULL AND interval_seconds BETWEEN 60 AND 86400 AND input_nonce IS NOT NULL AND input_ciphertext IS NOT NULL AND next_due_at IS NOT NULL)",
-            name="valid_automation_binding",
-        ),
+        CheckConstraint(BINDING, name="valid_automation_binding"),
         Index("ix_automation_due", "state", "kind", "next_due_at"),
         Index("ix_automation_workspace", "workspace_id", "created_at"),
     )
@@ -41,6 +50,8 @@ class WorkflowAutomation(Base):
     state: Mapped[str] = mapped_column(String(20), default="active")
     key_hash: Mapped[str | None] = mapped_column(String(64))
     interval_seconds: Mapped[int | None]
+    cron_expression: Mapped[str | None] = mapped_column(String(100))
+    timezone: Mapped[str | None] = mapped_column(String(64))
     input_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
     input_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     next_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

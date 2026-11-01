@@ -1,10 +1,10 @@
 import hashlib
 import hmac
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from app.core.credentials import load_master_key
 from app.core.db import get_db
 from app.core.errors import fail
 from app.modules.audit.service import record
-from app.modules.automations import service
+from app.modules.automations import cron, service
 from app.modules.automations.models import WorkflowAutomation
 from app.modules.deployments.service import throttle
 from app.modules.identity.service import check_csrf
@@ -31,15 +31,25 @@ class AutomationCreate(BaseModel):
     kind: Literal["webhook", "schedule"]
     version_id: uuid.UUID
     interval_seconds: int | None = Field(default=None, ge=60, le=86400, strict=True)
+    cron_expression: str | None = Field(default=None, min_length=9, max_length=100)
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
     input: dict | None = None
 
     @model_validator(mode="after")
     def valid_binding(self):
         if not self.name.strip():
             raise ValueError("Give this automation a name.")
-        if self.kind == "schedule" and (self.interval_seconds is None or self.input is None):
-            raise ValueError("Schedules need an interval and input object.")
-        if self.kind == "webhook" and (self.interval_seconds is not None or self.input is not None):
+        if self.kind == "schedule":
+            if self.input is None or (self.interval_seconds is None) == (
+                self.cron_expression is None
+            ):
+                raise ValueError("Schedules need an input object and an interval or cron schedule.")
+            if self.cron_expression is None and self.timezone is not None:
+                raise ValueError("A timezone applies only to cron schedules.")
+        if self.kind == "webhook" and any(
+            value is not None
+            for value in (self.interval_seconds, self.cron_expression, self.timezone, self.input)
+        ):
             raise ValueError("Webhook input comes from each incoming request.")
         return self
 
@@ -56,6 +66,8 @@ class AutomationRead(BaseModel):
     kind: Literal["webhook", "schedule"]
     state: Literal["active", "paused", "archived"]
     interval_seconds: int | None
+    cron_expression: str | None
+    timezone: str | None
     next_due_at: datetime | None
     next_attempt_at: datetime | None
     last_due_at: datetime | None
@@ -80,6 +92,12 @@ class EligibleTrigger(BaseModel):
 
 class EligibleTriggers(BaseModel):
     items: list[EligibleTrigger]
+
+
+class SchedulePreview(BaseModel):
+    cron_expression: str
+    timezone: str
+    occurrences: list[datetime]
 
 
 def admin(db, request, workspace_id):
@@ -138,6 +156,23 @@ def eligible(workspace_id: uuid.UUID, request: Request, db: Session = Depends(ge
                     }
                 )
     return {"items": items}
+
+
+@router.get("/schedule-preview", response_model=SchedulePreview)
+def schedule_preview(
+    workspace_id: uuid.UUID,
+    request: Request,
+    cron_expression: str = Query(min_length=9, max_length=100),
+    timezone: str = Query(default="UTC", min_length=1, max_length=64),
+    db: Session = Depends(get_db),
+):
+    authorize(request, db, workspace_id)
+    expression = cron.normalize(cron_expression, timezone)
+    return {
+        "cron_expression": expression,
+        "timezone": timezone,
+        "occurrences": cron.upcoming(expression, timezone, datetime.now(UTC)),
+    }
 
 
 @router.post(

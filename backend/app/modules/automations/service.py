@@ -14,6 +14,7 @@ from app.core.db import make_sessions
 from app.core.errors import fail
 from app.core.json_contracts import bounded_json, example_errors
 from app.modules.audit.service import record
+from app.modules.automations import cron
 from app.modules.automations.models import WorkflowAutomation
 from app.modules.workflows.models import WorkflowVersion
 from app.modules.workflows.runtime import _executable, submit
@@ -31,6 +32,8 @@ def public(row):
             "kind",
             "state",
             "interval_seconds",
+            "cron_expression",
+            "timezone",
             "next_due_at",
             "next_attempt_at",
             "last_due_at",
@@ -86,7 +89,13 @@ def create(db, workspace_id, actor_id, body, settings):
             fail(
                 422, "INPUT_SCHEMA_INVALID", "Scheduled input does not match the published version."
             )
-        row.interval_seconds = body.interval_seconds
+        if body.cron_expression is not None:
+            row.timezone = body.timezone or "UTC"
+            row.cron_expression = cron.normalize(body.cron_expression, row.timezone)
+            row.next_due_at = cron.following(row.cron_expression, row.timezone, datetime.now(UTC))
+        else:
+            row.interval_seconds = body.interval_seconds
+            row.next_due_at = datetime.now(UTC) + timedelta(seconds=body.interval_seconds)
         row.input_nonce, row.input_ciphertext = encrypt_secret(
             load_master_key(settings.credential_key_path),
             workspace_id,
@@ -94,7 +103,6 @@ def create(db, workspace_id, actor_id, body, settings):
             1,
             json.dumps(body.input),
         )
-        row.next_due_at = datetime.now(UTC) + timedelta(seconds=body.interval_seconds)
     db.add(row)
     record(
         db,
@@ -186,10 +194,17 @@ def tick(settings, now=None):
                             automation_id=row.id,
                             commit=False,
                         )
-                        # Keep the original interval anchor and skip missed occurrences.
-                        elapsed = int((now - slot).total_seconds()) // row.interval_seconds + 1
                         row.last_due_at = slot
-                        row.next_due_at = slot + timedelta(seconds=elapsed * row.interval_seconds)
+                        if row.cron_expression:
+                            row.next_due_at = cron.following(
+                                row.cron_expression, row.timezone, max(slot, now)
+                            )
+                        else:
+                            # Keep the original interval anchor and skip missed occurrences.
+                            elapsed = int((now - slot).total_seconds()) // row.interval_seconds + 1
+                            row.next_due_at = slot + timedelta(
+                                seconds=elapsed * row.interval_seconds
+                            )
                         row.next_attempt_at = None
                         row.last_error_code = None
                         accepted += int(created)

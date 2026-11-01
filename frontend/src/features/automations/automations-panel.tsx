@@ -4,6 +4,7 @@ import { LocalTime } from "@/components/shared/local-time";
 import { useState } from "react";
 import Link from "next/link";
 import {
+  CalendarClock,
   Clock3,
   KeyRound,
   Pause,
@@ -30,6 +31,41 @@ type Run = {
   created_at: string;
 };
 type Secret = components["schemas"]["AutomationSecret"];
+type SchedulePreview = components["schemas"]["SchedulePreview"];
+
+const CRON_PRESETS = [
+  ["Weekdays 09:00", "0 9 * * 1-5"],
+  ["Daily 08:00", "0 8 * * *"],
+  ["Mondays 09:00", "0 9 * * 1"],
+  ["Every hour", "0 * * * *"],
+] as const;
+
+function timezones(): string[] {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    return [];
+  }
+}
+
+function zonedTime(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+export function cadenceLabel(row: Automation): string {
+  if (row.kind !== "schedule") return "Authenticated webhook";
+  return row.cron_expression
+    ? `Cron ${row.cron_expression} · ${row.timezone}`
+    : `Every ${row.interval_seconds} seconds`;
+}
 
 export function AutomationsPanel({
   workspaceId,
@@ -47,6 +83,10 @@ export function AutomationsPanel({
   const [version, setVersion] = useState(eligible[0]?.version_id || "");
   const [name, setName] = useState("");
   const [interval, setIntervalSeconds] = useState(300);
+  const [cadence, setCadence] = useState<"interval" | "cron">("interval");
+  const [cron, setCron] = useState("0 9 * * 1-5");
+  const [timezone, setTimezone] = useState("");
+  const [preview, setPreview] = useState<SchedulePreview | null>(null);
   const [input, setInput] = useState("{}");
   const [secret, setSecret] = useState<Secret | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,7 +113,12 @@ export function AutomationsPanel({
           version_id: version,
           kind: selected.kind,
           ...(selected.kind === "schedule"
-            ? { interval_seconds: interval, input: JSON.parse(input) }
+            ? {
+                input: JSON.parse(input),
+                ...(cadence === "cron"
+                  ? { cron_expression: cron.trim(), timezone: timezone.trim() }
+                  : { interval_seconds: interval }),
+              }
             : {}),
         }),
       });
@@ -83,6 +128,32 @@ export function AutomationsPanel({
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Could not create automation.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  function chooseCadence(next: "interval" | "cron") {
+    setCadence(next);
+    // Resolved on interaction, not render, so server and browser markup agree.
+    if (next === "cron" && !timezone)
+      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  }
+  async function checkSchedule() {
+    setBusy(true);
+    setError("");
+    setPreview(null);
+    try {
+      const query = new URLSearchParams({
+        cron_expression: cron.trim(),
+        timezone: timezone.trim(),
+      });
+      setPreview(
+        await api<SchedulePreview>(`${base}/schedule-preview?${query}`),
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not check schedule.",
       );
     } finally {
       setBusy(false);
@@ -179,7 +250,7 @@ export function AutomationsPanel({
       <PageHeader
         eyebrow="AUTOMATION"
         title="Triggers & schedules"
-        description="Start a published workflow from an authenticated event or a persistent interval schedule."
+        description="Start a published workflow from an authenticated event, a persistent interval or a calendar schedule."
       />
       {error && <ErrorNotice message={error} />}
       {secret?.webhook_key && (
@@ -242,20 +313,128 @@ export function AutomationsPanel({
               </label>
               {selected?.kind === "schedule" && (
                 <>
-                  <label>
-                    Run every (seconds)
-                    <input
-                      type="number"
-                      min={60}
-                      max={86400}
-                      step={1}
-                      value={interval}
-                      disabled={busy}
-                      onChange={(e) =>
-                        setIntervalSeconds(Number(e.target.value))
-                      }
-                    />
-                  </label>
+                  <div
+                    className="segmented"
+                    role="radiogroup"
+                    aria-label="Schedule type"
+                  >
+                    {(
+                      [
+                        ["interval", "Fixed interval"],
+                        ["cron", "Calendar (cron)"],
+                      ] as const
+                    ).map(([option, title]) => (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={cadence === option}
+                        key={option}
+                        className={cadence === option ? "active" : ""}
+                        disabled={busy}
+                        onClick={() => chooseCadence(option)}
+                      >
+                        {title}
+                      </button>
+                    ))}
+                  </div>
+                  {cadence === "interval" ? (
+                    <label>
+                      Run every (seconds)
+                      <input
+                        type="number"
+                        min={60}
+                        max={86400}
+                        step={1}
+                        value={interval}
+                        disabled={busy}
+                        onChange={(e) =>
+                          setIntervalSeconds(Number(e.target.value))
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <>
+                      <div className="row">
+                        {CRON_PRESETS.map(([title, value]) => (
+                          <button
+                            type="button"
+                            className="chip-button"
+                            key={value}
+                            disabled={busy}
+                            onClick={() => {
+                              setCron(value);
+                              setPreview(null);
+                            }}
+                          >
+                            {title}
+                          </button>
+                        ))}
+                      </div>
+                      <label>
+                        Cron expression
+                        <input
+                          value={cron}
+                          maxLength={100}
+                          disabled={busy}
+                          spellCheck={false}
+                          onChange={(e) => {
+                            setCron(e.target.value);
+                            setPreview(null);
+                          }}
+                          placeholder="0 9 * * 1-5"
+                          aria-describedby="cron-help"
+                        />
+                      </label>
+                      <small id="cron-help">
+                        Five fields: minute, hour, day of month, month, day of
+                        week. Example: <code>30 8 * * mon-fri</code> runs at
+                        08:30 on weekdays.
+                      </small>
+                      <label>
+                        Timezone
+                        <input
+                          list="automation-timezones"
+                          value={timezone}
+                          maxLength={64}
+                          disabled={busy}
+                          spellCheck={false}
+                          onChange={(e) => {
+                            setTimezone(e.target.value);
+                            setPreview(null);
+                          }}
+                        />
+                        <datalist id="automation-timezones">
+                          {timezones().map((zone) => (
+                            <option key={zone} value={zone} />
+                          ))}
+                        </datalist>
+                      </label>
+                      <div>
+                        <Button
+                          variant="outline"
+                          disabled={busy || !cron.trim() || !timezone.trim()}
+                          onClick={checkSchedule}
+                        >
+                          <CalendarClock size={14} />
+                          Show next runs
+                        </Button>
+                      </div>
+                      {preview && (
+                        <div aria-live="polite">
+                          <h4>Next runs ({preview.timezone})</h4>
+                          <ul>
+                            {preview.occurrences.map((value) => (
+                              <li key={value}>
+                                <time dateTime={value}>
+                                  {zonedTime(value, preview.timezone)}
+                                </time>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
                   <label>
                     Input JSON
                     <textarea
@@ -268,10 +447,12 @@ export function AutomationsPanel({
                     />
                   </label>
                   <p>
-                    First run starts after one interval. Saved input is
-                    encrypted. Agent steps can incur provider charges on every
-                    run. Missed intervals are coalesced into one run after
-                    downtime.
+                    {cadence === "cron"
+                      ? "First run happens at the next matching time. When clocks change for daylight saving, a skipped time runs right after the change and a repeated fixed time runs once."
+                      : "First run starts after one interval."}{" "}
+                    Saved input is encrypted. Agent steps can incur provider
+                    charges on every run. Missed runs are coalesced into one run
+                    after downtime.
                   </p>
                 </>
               )}
@@ -316,11 +497,7 @@ export function AutomationsPanel({
                   )}
                   <div>
                     <h3>{row.name}</h3>
-                    <small>
-                      {row.kind === "schedule"
-                        ? `Every ${row.interval_seconds} seconds`
-                        : "Authenticated webhook"}
-                    </small>
+                    <small>{cadenceLabel(row)}</small>
                   </div>
                 </div>
                 <Badge tone={row.state === "active" ? "green" : "amber"}>

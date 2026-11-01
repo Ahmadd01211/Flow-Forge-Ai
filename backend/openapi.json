@@ -364,6 +364,19 @@
       "AutomationCreate": {
         "additionalProperties": false,
         "properties": {
+          "cron_expression": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 9,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Expression"
+          },
           "input": {
             "anyOf": [
               {
@@ -403,6 +416,19 @@
             "title": "Name",
             "type": "string"
           },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
           "version_id": {
             "format": "uuid",
             "title": "Version Id",
@@ -440,6 +466,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "cron_expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Expression"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -524,6 +561,17 @@
             "title": "State",
             "type": "string"
           },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          },
           "version_id": {
             "format": "uuid",
             "title": "Version Id",
@@ -537,6 +585,8 @@
           "kind",
           "state",
           "interval_seconds",
+          "cron_expression",
+          "timezone",
           "next_due_at",
           "next_attempt_at",
           "last_due_at",
@@ -553,6 +603,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "cron_expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Expression"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -636,6 +697,17 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
           },
           "version_id": {
             "format": "uuid",
@@ -661,6 +733,8 @@
           "kind",
           "state",
           "interval_seconds",
+          "cron_expression",
+          "timezone",
           "next_due_at",
           "next_attempt_at",
           "last_due_at",
@@ -2528,6 +2602,33 @@
           "finished_at"
         ],
         "title": "RunRead",
+        "type": "object"
+      },
+      "SchedulePreview": {
+        "properties": {
+          "cron_expression": {
+            "title": "Cron Expression",
+            "type": "string"
+          },
+          "occurrences": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron_expression",
+          "timezone",
+          "occurrences"
+        ],
+        "title": "SchedulePreview",
         "type": "object"
       },
       "SharingUpdate": {
@@ -6024,6 +6125,72 @@
           }
         },
         "summary": "Eligible",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/automations/schedule-preview": {
+      "get": {
+        "operationId": "schedule_preview_api_v1_workspaces__workspace_id__automations_schedule_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cron_expression",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 9,
+              "title": "Cron Expression",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timezone",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Timezone",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Schedule Preview",
         "tags": [
           "automations"
         ]
