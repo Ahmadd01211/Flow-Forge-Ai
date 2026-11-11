@@ -159,9 +159,16 @@ def test_switch_requires_a_valid_value_reference(reference):
 
 
 def test_switch_keeps_json_scalar_types_distinct_and_allows_eight_cases():
-    values = [True, 1, 1.0, "1", None, False, 0, ""]
+    values = [True, 1, 1.5, "1", None, False, 0, ""]
     cases = [{"id": f"case{i}", "label": "Case", "value": value} for i, value in enumerate(values)]
     assert validate_graph(Graph.model_validate(branch_graph(cases=cases)))["valid"]
+
+
+@pytest.mark.parametrize(("first", "second"), [(1, 1.0), (0, -0.0)])
+def test_switch_rejects_equivalent_json_number_cases(first, second):
+    cases = [{"id": "first", "label": "First", "value": first}, {"id": "second", "label": "Second", "value": second}]
+    errors = validate_graph(Graph.model_validate(branch_graph(cases=cases)))["errors"]
+    assert any(issue["code"] == "SWITCH_CONFIG_INVALID" for issue in errors)
 
 
 @pytest.mark.parametrize("reference", [

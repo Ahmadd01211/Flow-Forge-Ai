@@ -113,6 +113,28 @@ def test_switch_resolves_literal_and_fails_missing_input():
     assert raised.value.detail["code"] == "POINTER_MISSING"
 
 
+@pytest.mark.parametrize(("case", "value"), [(1, 1.0), (1.0, 1), (0, -0.0), (-0.0, 0)])
+def test_switch_matches_equivalent_json_numbers(case, value):
+    config = {"value": {"kind": "input", "pointer": "/value"}, "cases": [{"id": "number", "label": "Number", "value": case}]}
+    assert _step("switch", config, {"value": value})["selected_port"] == "number"
+
+
+@pytest.mark.parametrize(("items", "expected"), [
+    ([1, 1.0, 0, -0.0, True, False], {"items": [1, 0, True, False], "count": 4, "removed": 2}),
+    ([{"key": [1, {"zero": 0}]}, {"key": [1.0, {"zero": -0.0}]}, {"key": [True, {"zero": False}]}],
+     {"items": [{"key": [1, {"zero": 0}]}, {"key": [True, {"zero": False}]}], "count": 2, "removed": 1}),
+])
+def test_deduplicate_compares_json_number_values_recursively(items, expected):
+    assert _step("list_deduplicate", {"source": ""}, items)["output"] == expected
+
+
+def test_deduplicate_object_field_compares_json_number_values_recursively():
+    items = [{"key": [1, -0.0], "label": "first"}, {"key": [1.0, 0], "label": "later"}, {"key": [True, False]}]
+    assert _step("list_deduplicate", {"source": "", "item_pointer": "/key"}, items)["output"] == {
+        "items": [{"key": [1, -0.0], "label": "first"}, {"key": [True, False]}], "count": 2, "removed": 1,
+    }
+
+
 @pytest.mark.parametrize(("items", "expected"), [
     ([], {"items": [], "count": 0, "removed": 0}),
     (["b", "a", "b", "c", "a"], {"items": ["b", "a", "c"], "count": 3, "removed": 2}),

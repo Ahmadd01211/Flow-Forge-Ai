@@ -139,3 +139,11 @@ def test_switch_configuration_errors_block_individual_node_tests():
     config["value"] = {"kind": "literal", "value": True}
     config["cases"].append({"id": "other", "label": "Other", "value": True})
     assert _paths("switch", config)
+
+
+@pytest.mark.parametrize(("first", "second"), [(1, 1.0), (0, -0.0)])
+def test_switch_node_config_rejects_equivalent_json_number_cases(first, second):
+    config = {"value": {"kind": "input", "pointer": ""}, "cases": [
+        {"id": "first", "label": "First", "value": first}, {"id": "second", "label": "Second", "value": second},
+    ]}
+    assert set(_paths("switch", config)) == {"config.cases"}

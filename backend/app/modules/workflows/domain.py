@@ -5,7 +5,7 @@ from collections import deque
 
 from fastapi import HTTPException
 
-from app.core.json_contracts import bounded_json
+from app.core.json_contracts import bounded_json, json_equality_key
 from app.modules.workflows.schemas import Graph
 
 
@@ -44,7 +44,7 @@ def switch_ports(config: dict) -> set[str]:
     if not isinstance(cases, list) or not 1 <= len(cases) <= 8:
         raise ValueError("Add between one and eight Switch cases.")
     ports = {"default"}
-    values: set[str] = set()
+    values: set[tuple] = set()
     for case in cases:
         if not isinstance(case, dict) or set(case) != {"id", "label", "value"}:
             raise ValueError("Every case needs an ID, label and scalar value.")
@@ -60,7 +60,7 @@ def switch_ports(config: dict) -> set[str]:
             raise ValueError("Case labels need one to forty characters.")
         if type(value) not in (str, int, float, bool, type(None)):
             raise ValueError("Case values must be text, numbers, booleans or null.")
-        canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        canonical = json_equality_key(value)
         if canonical in values:
             raise ValueError("Each Switch case needs a different value.")
         values.add(canonical)

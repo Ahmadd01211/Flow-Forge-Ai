@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import fail
-from app.core.json_contracts import bounded_json, example_errors
+from app.core.json_contracts import bounded_json, example_errors, json_equality_key
 from app.modules.agents.models import AgentVersion
 from app.modules.executions.service import MODEL_PRICES
 from app.modules.integrations.models import IntegrationConnection
@@ -334,7 +334,7 @@ def _deduplicate(config: dict, data: object) -> dict:
     if not isinstance(items, list):
         fail(422, "LIST_DEDUPLICATE_INPUT_INVALID", "Remove duplicates needs an array.")
     selected = []
-    seen: set[str] = set()
+    seen: set[tuple] = set()
     for item in items:
         if "item_pointer" in config and not isinstance(item, dict):
             fail(422, "LIST_DEDUPLICATE_INPUT_INVALID", "A field path requires every list item to be an object.")
@@ -346,7 +346,7 @@ def _deduplicate(config: dict, data: object) -> dict:
             # Missing fields have no identity; each item survives independently.
             selected.append(item)
             continue
-        key = _canonical_text(value)
+        key = json_equality_key(value)
         if key not in seen:
             seen.add(key)
             selected.append(item)
@@ -406,8 +406,8 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
         branch = "true" if _compare(left, right, node.config["operator"]) else "false"
         output = data
     elif node.type == "switch":
-        value = _canonical_text(_value(node.config["value"], data))
-        branch = next((case["id"] for case in node.config["cases"] if _canonical_text(case["value"]) == value), "default")
+        value = json_equality_key(_value(node.config["value"], data))
+        branch = next((case["id"] for case in node.config["cases"] if json_equality_key(case["value"]) == value), "default")
         output = data
     elif node.type == "text_template":
         def substitute(match, source=data):

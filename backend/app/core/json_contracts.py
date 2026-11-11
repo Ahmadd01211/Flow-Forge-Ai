@@ -2,6 +2,7 @@
 
 import json
 import math
+from decimal import Decimal
 from itertools import islice
 
 from jsonschema import Draft202012Validator
@@ -40,6 +41,21 @@ TOOL_ANNOTATIONS = {
     "readOnly", "writeOnly", "contentMediaType", "contentEncoding",
 }
 UNSAFE_NAMES = {"__proto__", "prototype", "constructor"}
+
+
+def json_equality_key(value: object) -> tuple:
+    """Hashable identity for bounded JSON, with one number type and strict scalar types.
+
+    Decimal equality ignores exponent spelling and signed zero without rounding large
+    integers through float. Callers enforce JSON size, depth and finite-number limits.
+    """
+    if isinstance(value, dict):
+        return ("object", tuple((key, json_equality_key(child)) for key, child in sorted(value.items())))
+    if isinstance(value, list):
+        return ("array", tuple(json_equality_key(child) for child in value))
+    if type(value) in (int, float):
+        return ("number", Decimal(str(value)))
+    return (type(value).__name__, value)
 
 
 def sanitize_tool_schema(schema: object) -> object:
