@@ -35,7 +35,7 @@
 - Modify: `backend/app/modules/templates/catalog.py`
 - Modify: `backend/app/modules/templates/router.py`
 - Modify: `backend/app/modules/skills/service.py` only if a focused copy helper is needed
-- Test: `backend/tests/modules/templates/test_templates.py` (use the existing test file if named differently)
+- Test: `backend/tests/test_templates.py`
 
 **Interfaces:**
 - Input remains `POST /workspaces/{workspace_id}/templates/{template_key}/instantiate`.
