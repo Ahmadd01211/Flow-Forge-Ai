@@ -46,10 +46,10 @@
 
 **Interfaces:** `switch` reads the configured `REFERENCE` (`{kind: input, pointer}` or `{kind: literal, value}`), returns the selected stable case ID as `selected_port`, and routes unmatched inputs through `default`. Add `list_deduplicate` with `source` input JSON Pointer and optional `item_pointer` into each object; output is `{items, count, removed}`; preserve first occurrence and array order, compare canonical JSON values strictly (so booleans differ from numbers), and fail on non-array input or a non-object item when `item_pointer` is set. If the selected item path is missing, keep each such item independently; explicit null is a value and repeated nulls collapse. With no `item_pointer`, compare each whole item. Bound input/output using existing JSON limits.
 
-- [ ] Write failing tests for matching/unmatched switch routing and deduplication equality, order, nested field, null, missing field, type errors and size limit.
-- [ ] Run tests and confirm failures.
-- [ ] Implement runtime/preview dispatch using the same pure operation helper so preview and durable execution agree.
-- [ ] Verify trace includes selected switch port and deduplication output/count; run focused tests and commit.
+- [x] Write failing tests for matching/unmatched switch routing and deduplication equality, order, nested field, null, missing field, type errors and size limit.
+- [x] Run tests and confirm failures: initial suite 30 intended failures; fix regressions 11 intended failures.
+- [x] Implement runtime/preview dispatch using the same pure operation helper so preview and durable execution agree. Durable dispatch already shares `run_step`; no separate runtime edit was needed.
+- [x] Verify trace includes selected switch port and deduplication output/count; focused suites pass. Task review's numeric equality finding was fixed and scoped re-review approved. Full backend suite: 447 passed; Ruff clean. Commits `48ec77b`, `7855895`.
 
 ### Task 3: Builder configuration, edges and trace display
 
