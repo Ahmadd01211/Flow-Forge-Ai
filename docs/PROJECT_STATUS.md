@@ -1,6 +1,6 @@
 # Project status
 
-Date: 11 November 2026 (Asia/Karachi).
+Date: 12 November 2026 (Asia/Karachi).
 
 ## Finish line
 
@@ -54,6 +54,10 @@ Recorded guided-creation automated verification (11 November 2026, before the we
 Website refresh documentation audit (11 November 2026): source catalog/schema counts, registration/workspace routes, editor controls and local Markdown links were checked. The manual guide now includes Switch/default routing and first-record contact deduplication. These source checks do not rerun the application suites or certify the running stack. Earlier test totals below describe their own slices.
 
 The final signed-in GUI walkthrough and real-provider acceptance remain for the user. Follow [noncoder creation checks](manual-testing/noncoder-creation.md) with your own credential through Integrations. No live-provider success is asserted by this documentation update.
+
+## Final verification of practical nodes and website refresh
+
+The combined implementation passed the configured PostgreSQL/Redis backend suite (**457 tests**) and frontend suite (**100 tests across 25 files**). Ruff, frontend lint, TypeScript, backend OpenAPI consistency, frontend generated API consistency and the production build passed. The whole-branch review's sole minor finding, an inaccurate Remove duplicates help-text limit, was corrected in `a29bc57`; the existing focused form tests passed (3 tests), and scoped re-review approved the fix with no remaining findings. These checks do not certify signed-in browser behavior or real-provider generation; use the manual acceptance guide for those remaining checks.
 
 ## Historical verification evidence
 
