@@ -20,7 +20,7 @@ The user confirmed a complete local release first. Public hosting, subscriptions
 - Templates: reviewed starters plus user saving, independent copies and sharing controls. Private connection bindings are removed from portable copies.
 - Hosted API access: version-pinned local endpoints, one-time bearer keys, scoped polling, rotation/revocation and rate limiting.
 - HTTP API tools: admin-approved fixed HTTPS destinations/methods, encrypted reusable header credentials, read-only agent grants, published workflow writes, contract checking and SSRF restrictions. Tool Registry separates API tools from local utilities.
-- Action starters and portability: ten built-in templates, including webhook actions, scheduled digests, AI priority routing and a working customer-profile/batch pair; setup instructions/sample JSON; versioned private import/export with workspace bindings cleared.
+- Action starters and portability: thirteen built-in recipes, including webhook actions, scheduled digests, AI priority routing and a working customer-profile/batch pair; setup instructions/sample JSON; versioned private import/export with workspace bindings cleared.
 - Recovery operations: password-encrypted database/environment/master-key backup helper and a successful isolated PostgreSQL restore rehearsal. Async workers recheck requester/deployment permissions after admission and between workflow steps.
 - Approvals and timers: durable Human approval and Wait nodes park a run without holding a worker; decisions are bound to the scoped node and canonical input hash, with independent review by default. Combined worst-case waits are bounded to 24 hours.
 - Activity: owners/admins filter and page workspace audit events and export the displayed page as JSON.
@@ -38,9 +38,24 @@ The guided agent/workflow workbench is implemented on the existing authoring and
 - **Run evidence:** the execution trace service records safe events and feedback against durable runs; the run detail, trace and feedback components display persisted evidence.
 - **Persistence and API contract:** migrations `0026` through `0032` add workflow model agents, conversation memory, run source, agent playground, skills, run traces/feedback and builder assistants. `backend/openapi.json` and generated frontend types include the current API contract.
 
-This is a broad 106-file integration commit on `feature/local-release-continuation` (`3d1b4f2`), not an uncommitted working tree. The current local database reports migration `0032 (head)`.
+The original guided workbench baseline was a broad 106-file integration commit on `feature/local-release-continuation` (`3d1b4f2`), not an uncommitted working tree. That baseline reported migration `0032 (head)`; current source also includes `0033_agent_tool_approvals.py`. This documentation update does not certify the applied database revision.
 
-## Evidence
+## Guided creation and provider readiness (11 November 2026)
+
+- Source inventory: **13 built-in recipes**, **11 starter skills**, and **20 workflow node types**. Recipes are assembled in `backend/app/modules/templates/catalog.py` with action, approval and composition starters; skills are in `backend/app/modules/skills/catalog.py`; node types are defined in `backend/app/modules/workflows/schemas.py`.
+- Task recipes support local goal search, category filtering and a Recommended result. Preview shows setup, expected output, sample input where supplied, and run guidance before **Create workspace draft**. Preview/search make no model call. Customer reply draft and Meeting action items extend the existing eleven recipes.
+- Created agents/workflows and copied skills are workspace-visible editable drafts. The creation handoff links each attached skill for review and publication before agent testing or publication. Skill edits require a new immutable skill version and another agent readiness review.
+- Integrations keeps provider/key setup available with zero connected providers. Owners/admins can verify their own key, refresh the saved-key model catalog, search models and save a default. Model listing verifies access to a catalog; generation access and billing capacity still require a real accepted test. Setup-only models remain distinct from runnable models.
+- Local workflow **Preview** executes supported saved-draft steps without a durable full run. Agent/model/external-service/approval/timer steps require **Publish** followed by **Run**; publication alone does not execute anything.
+- Approval inside the agent tool loop is delivered for write-capable MCP calls: encrypted exact-call context, independent owner/admin review, durable worker continuation, permission rechecks, expiry and outcome handling are implemented in `executions/agent_approvals.py`, with migration `0033` and regression coverage in `test_agent_tool_approvals.py`.
+
+Final automated verification (11 November 2026): PostgreSQL/Redis backend suite **355 passed in 120.83s** with the backend source explicitly mounted, Ruff clean; frontend Vitest **73 tests across 20 files**, ESLint, API drift check, Webpack production build and standalone TypeScript typecheck passed. Source inventory, checklist route files and local Markdown links were checked. Tests use controlled provider responses; these checks do not certify real-account generation or signed-in GUI behavior.
+
+The final signed-in GUI walkthrough and real-provider acceptance remain for the user. Follow [noncoder creation checks](manual-testing/noncoder-creation.md) with your own credential through Integrations. No live-provider success is asserted by this documentation update.
+
+## Historical verification evidence
+
+The results below record earlier slices; they are not fresh acceptance evidence for the guided creation follow-up.
 
 The full PostgreSQL/Redis suite passed 270 tests, including eighteen new composition cases. Eighteen frontend tests cover nested preview controls and deterministic server timestamps, alongside existing editor tests. Lint, type checking, generated API drift checks and production builds pass. A fresh Celery process completes a DAG through real Redis/PostgreSQL. The live stack also completed a two-customer batch with all nine scoped checkpoints; preview/durable outputs matched by JSON value. API readiness checks migrations, PostgreSQL and Redis. Encrypted backup and isolated restore rehearsal passed against migration 0022 without replacing live data.
 
@@ -52,7 +67,7 @@ MCP workflow picker (11 November 2026): the workflow **MCP tool** step now searc
 
 An additional interactive signed-in browser smoke check was not completed in this session because the computer-use browser host was unavailable. Browser-level verification remains outstanding; no provider credentials or real external model calls were used.
 
-Migrations through `0032` are applied locally. Earlier migrations cover templates, examples, automation bindings, usage controls, workflow composition, schedules, tools, approvals and workspace policy; migrations `0026`–`0032` add the guided workbench capabilities listed above. Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
+The earlier guided workbench verification recorded migrations through `0032` applied locally. Current source additionally contains migration `0033` for agent tool approvals. Earlier migrations cover templates, examples, automation bindings, usage controls, workflow composition, schedules, tools, approvals and workspace policy; migrations `0026`–`0032` add the guided workbench capabilities listed above. Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
 
 The local stack is available at http://localhost:8080. Signed-in HTTP smoke checks cover editors, settings, integrations, API tools, templates, workflow executions, automations and usage. No shared demo password is provided. Disposable accounts were used for browser checks of Tool Registry, the loop builder/preview and per-item execution evidence. Timestamp hydration mismatches and clipped trace badges were corrected. The dashboard now shows real recorded usage rather than an obsolete runtime placeholder. Windows-mounted source refresh was changed to Webpack polling after stale rendered code was observed; this is the supported local development path.
 
@@ -66,10 +81,11 @@ Before the MCP slice, no real provider credential, external mailbox, MCP server 
 
 General while-loops, richer expressions, signed vendor webhook receivers, fine-grained resource permissions and OAuth remain visible roadmap items. Waits longer than 24 hours are not supported. HTTP service recipes use existing admin-supplied credentials; Slack/GitHub acceptance has not been tested against real accounts. Subscription billing and public hosting are excluded from this local-first pass. Public use additionally requires operator-owned plan ceilings, HTTPS, managed backup/key-rotation operations, network egress policy, load/capacity isolation and external security review. The local backup helper is capped at 256 MiB and provides isolated restore verification rather than live replacement or point-in-time recovery.
 
-Workspace owners/admins add MCP servers themselves; the operator catalog is optional and can lock installs to reviewed servers only. GitHub's hosted MCP server connects with a fine-grained token via a quick-setup preset; tool lists are paged up to 250 tools, and `anyOf` schemas are supported (`$ref` tools are still skipped). Rejected tokens are reported as `MCP_AUTH_FAILED`, verified against GitHub's live server with invalid tokens. No valid GitHub token was used, so authenticated GitHub tool calls remain to be accepted by the user. Approval inside an agent's own tool loop and MCP OAuth are not yet implemented. Owners/admins supply their own keys through the local interface. Never paste a credential into a support conversation.
+Workspace owners/admins add MCP servers themselves; the operator catalog is optional and can lock installs to reviewed servers only. GitHub's hosted MCP server connects with a fine-grained token via a quick-setup preset; tool lists are paged up to 250 tools, and `anyOf` schemas are supported (`$ref` tools are still skipped). Rejected tokens are reported as `MCP_AUTH_FAILED`, verified against GitHub's live server with invalid tokens. No valid GitHub token was used, so authenticated GitHub tool calls remain to be accepted by the user. Write-capable MCP calls now support durable independent approval inside an agent's own tool loop; MCP OAuth remains unimplemented. Owners/admins supply their own keys through the local interface. Never paste a credential into a support conversation.
 
 ## Walkthroughs
 
+- [Noncoder recipe, skill, provider and workflow GUI checks](manual-testing/noncoder-creation.md)
 - [Guided first run and manual GUI checklist](learning/24-GUIDED-FIRST-RUN.md)
 - [Search and select MCP tools in workflows](learning/25-MCP-TOOL-PICKER.md)
 - [Agent MCP, provider tools and regression evidence](learning/12-AGENT-MCP-AND-REGRESSIONS.md)
@@ -85,5 +101,5 @@ Workspace owners/admins add MCP servers themselves; the operator catalog is opti
 - [Calendar (cron) schedules](learning/22-CRON-SCHEDULES.md)
 - [Workspace MCP servers and tool policies](learning/23-WORKSPACE-MCP-SERVERS.md)
 
-Repository: `Ahmadd01211/Flow-Forge-Ai`, branch `feature/local-release-continuation`, at commit `3d1b4f2` for the verified baseline. That branch is pushed to GitHub; `main` remains unchanged. The working tree was clean before this status update. Secrets and generated build data are ignored. The old ResearchPilot project was not accessed.
+Repository: `Ahmadd01211/Flow-Forge-Ai`, branch `feature/local-release-continuation`, at commit `3d1b4f2` for the verified baseline. That branch is pushed to GitHub; `main` remains unchanged. That statement describes the baseline only; later changes and their evidence are recorded separately. Secrets and generated build data are ignored. The old ResearchPilot project was not accessed.
 
