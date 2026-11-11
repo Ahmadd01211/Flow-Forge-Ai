@@ -58,6 +58,27 @@ function gallery(canCreate = true) {
 }
 
 describe("guided recipes", () => {
+  it("recommends a natural-language task or selected category without a focus URL", () => {
+    gallery();
+    fireEvent.change(screen.getByLabelText("Search recipes"), {
+      target: { value: "I want to answer customer questions" },
+    });
+    let recommended = screen.getByText("Recommended").closest("article")!;
+    expect(
+      within(recommended).getByRole("heading", { name: agent.name }),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search recipes"), {
+      target: { value: "" },
+    });
+    fireEvent.change(screen.getByLabelText("Category"), {
+      target: { value: "Productivity" },
+    });
+    recommended = screen.getByText("Recommended").closest("article")!;
+    expect(
+      within(recommended).getByRole("heading", { name: workflow.name }),
+    ).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
+  });
   it("keeps the preview during creation so the draft handoff cannot be lost", async () => {
     request
       .mockResolvedValueOnce(agentDetail)

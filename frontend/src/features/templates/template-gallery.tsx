@@ -15,10 +15,7 @@ import { Badge, ErrorNotice, PageHeader } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import type { GraphNode } from "@/lib/api/types";
-import {
-  filterRecipes,
-  templatePresentation,
-} from "@/features/workspace/task-start-model";
+import { discoverRecipes } from "@/features/workspace/task-start-model";
 import { requiresPublishedRun } from "@/features/workflows/node-config";
 
 export interface TemplateEntry {
@@ -100,7 +97,7 @@ export function TemplateGallery({
   const createdHeading = useRef<HTMLHeadingElement>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const filtered = filterRecipes(items, query, category);
+  const recipes = discoverRecipes(items, query, category, focus);
 
   async function exportTemplate(item: TemplateEntry) {
     setBusy(item.key);
@@ -443,86 +440,84 @@ export function TemplateGallery({
         </section>
       )}
       <div className="template-grid">
-        {templatePresentation(filtered, focus).map(
-          ({ template: item, recommended }) => (
-            <article key={item.key} className="panel template-card">
-              <div className="row between">
-                <span
-                  className={`node-icon ${item.kind === "agent" ? "purple" : "blue"}`}
+        {recipes.map(({ template: item, recommended }) => (
+          <article key={item.key} className="panel template-card">
+            <div className="row between">
+              <span
+                className={`node-icon ${item.kind === "agent" ? "purple" : "blue"}`}
+              >
+                {item.kind === "agent" ? (
+                  <Bot size={22} />
+                ) : (
+                  <GitBranch size={22} />
+                )}
+              </span>
+              <div className="row">
+                {recommended && <Badge tone="green">Recommended</Badge>}
+                <Badge tone="purple">{item.category}</Badge>
+              </div>
+            </div>
+            <h2>{item.name}</h2>
+            <p>{item.description}</p>
+            <p>
+              Required setup:{" "}
+              {item.kind === "agent"
+                ? "provider, model and review of attached skills"
+                : "review steps, connections and run readiness"}
+              .
+            </p>
+            <Badge>
+              {item.visibility
+                ? {
+                    private: "Only me",
+                    workspace: "Workspace",
+                    public: "Community",
+                  }[item.visibility]
+                : "Built-in"}
+            </Badge>
+            {item.owned && (
+              <label className="field">
+                Sharing
+                <select
+                  aria-label={`Sharing for ${item.name}`}
+                  value={item.visibility}
+                  disabled={!!busy}
+                  onChange={(e) => changeSharing(item, e.target.value)}
                 >
-                  {item.kind === "agent" ? (
-                    <Bot size={22} />
-                  ) : (
-                    <GitBranch size={22} />
-                  )}
-                </span>
-                <div className="row">
-                  {recommended && <Badge tone="green">Recommended</Badge>}
-                  <Badge tone="purple">{item.category}</Badge>
-                </div>
-              </div>
-              <h2>{item.name}</h2>
-              <p>{item.description}</p>
-              <p>
-                Required setup:{" "}
-                {item.kind === "agent"
-                  ? "provider, model and review of attached skills"
-                  : "review steps, connections and run readiness"}
-                .
-              </p>
-              <Badge>
-                {item.visibility
-                  ? {
-                      private: "Only me",
-                      workspace: "Workspace",
-                      public: "Community",
-                    }[item.visibility]
-                  : "Built-in"}
-              </Badge>
-              {item.owned && (
-                <label className="field">
-                  Sharing
-                  <select
-                    aria-label={`Sharing for ${item.name}`}
-                    value={item.visibility}
-                    disabled={!!busy}
-                    onChange={(e) => changeSharing(item, e.target.value)}
-                  >
-                    <option value="private">Only me</option>
-                    <option value="workspace">Workspace members</option>
-                    <option value="public">Everyone signed in</option>
-                  </select>
-                </label>
-              )}
-              <Button
-                aria-label={`Preview ${item.name}`}
-                disabled={!!busy}
-                onClick={(event) => {
-                  previewTrigger.current = event.currentTarget;
-                  void showPreview(item);
-                }}
-              >
-                Preview
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!!busy}
-                onClick={() => exportTemplate(item)}
-              >
-                <Download size={14} />
-                Export JSON
-              </Button>
-              <div className="template-footer">
-                <span>
-                  {item.kind === "agent" ? "Agent starter" : "Workflow starter"}{" "}
-                  · v{item.template_version}
-                </span>
-              </div>
-            </article>
-          ),
-        )}
+                  <option value="private">Only me</option>
+                  <option value="workspace">Workspace members</option>
+                  <option value="public">Everyone signed in</option>
+                </select>
+              </label>
+            )}
+            <Button
+              aria-label={`Preview ${item.name}`}
+              disabled={!!busy}
+              onClick={(event) => {
+                previewTrigger.current = event.currentTarget;
+                void showPreview(item);
+              }}
+            >
+              Preview
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={!!busy}
+              onClick={() => exportTemplate(item)}
+            >
+              <Download size={14} />
+              Export JSON
+            </Button>
+            <div className="template-footer">
+              <span>
+                {item.kind === "agent" ? "Agent starter" : "Workflow starter"} ·
+                v{item.template_version}
+              </span>
+            </div>
+          </article>
+        ))}
       </div>
-      {filtered.length === 0 && (
+      {recipes.length === 0 && (
         <p role="status">
           No recipes match. Try another task or choose all categories.
         </p>

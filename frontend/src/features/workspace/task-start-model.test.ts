@@ -4,9 +4,83 @@ import {
   startingChoices,
   templatePresentation,
   filterRecipes,
+  discoverRecipes,
 } from "./task-start-model";
 
 describe("guided task start", () => {
+  const goals = [
+    {
+      key: "support-triage",
+      name: "Support ticket triage",
+      description: "Classify an incoming ticket and explain the priority.",
+      category: "Support",
+    },
+    {
+      key: "customer-reply-draft",
+      name: "Customer reply draft",
+      description: "Draft a customer reply using brand guidance.",
+      category: "Support",
+    },
+    {
+      key: "faq-answer",
+      name: "FAQ answer assistant",
+      description: "Answer a question using only supplied reference material.",
+      category: "Knowledge",
+    },
+  ];
+
+  it("ranks a natural goal by meaningful task words and recommends its closest recipe", () => {
+    const result = discoverRecipes(
+      goals,
+      "I want to answer customer questions",
+      "all",
+    );
+    expect(
+      result.map(({ template, recommended }) => [template.key, recommended]),
+    ).toEqual([
+      ["faq-answer", true],
+      ["customer-reply-draft", false],
+    ]);
+    expect(
+      filterRecipes(goals, "Can you help me sort urgent tickets?", "all").map(
+        (r) => r.key,
+      ),
+    ).toEqual(["support-triage"]);
+    expect(goals.map((r) => r.key)).toEqual([
+      "support-triage",
+      "customer-reply-draft",
+      "faq-answer",
+    ]);
+  });
+
+  it("retains partial task search while ranking complete goal words", () => {
+    expect(filterRecipes(goals, "refer", "all").map((r) => r.key)).toEqual([
+      "faq-answer",
+    ]);
+  });
+
+  it("recommends within a category without a focus URL and respects an available explicit focus", () => {
+    expect(
+      discoverRecipes(goals, "", "Support").map(({ template, recommended }) => [
+        template.key,
+        recommended,
+      ]),
+    ).toEqual([
+      ["support-triage", true],
+      ["customer-reply-draft", false],
+    ]);
+    expect(
+      discoverRecipes(goals, "", "Support", "customer-reply-draft")[0],
+    ).toEqual({ template: goals[1], recommended: true });
+    expect(discoverRecipes(goals, "", "Support", "missing")[0]).toEqual({
+      template: goals[0],
+      recommended: true,
+    });
+    expect(
+      discoverRecipes(goals, "I want to", "all").every((r) => !r.recommended),
+    ).toBe(true);
+    expect(discoverRecipes(goals, "astronomy", "Support")).toEqual([]);
+  });
   it("searches task words without a provider call and combines category selection", () => {
     const recipes = [
       {
