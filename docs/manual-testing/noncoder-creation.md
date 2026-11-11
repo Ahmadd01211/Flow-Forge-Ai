@@ -1,6 +1,12 @@
 # Noncoder creation: manual GUI checklist
 
-Prepared from source on 11 November 2026. **Not yet executed in the GUI: final walkthrough belongs to the user.** Tick boxes only after observing the result. Use `http://localhost:8080`, sign in and select a workspace. Replace `<workspaceId>`, `<agentId>` and `<workflowId>` below with the IDs in its URLs. Use an owner/admin account for provider setup and an editor or above for draft creation. Use safe sample data: drafts and copied skills are workspace-visible.
+Prepared from source on 11 November 2026. **Not yet executed in the GUI: final walkthrough belongs to the user.** Tick boxes only after observing the result. Use the running local app at `http://localhost:8080`. Replace `<workspaceId>`, `<agentId>` and `<workflowId>` below with the IDs in its URLs. Use an owner/admin account for provider setup and an editor or above for draft creation. Use safe sample data: drafts and copied skills are workspace-visible.
+
+## Register and open a workspace
+
+- [ ] From the public page choose **Start building** (or open `/register`). Fill **Your name**, **Workspace name**, **Email address**, and a unique **Password** of at least 12 characters, then **Create workspace**. Confirm the workspace overview at `/w/<workspaceId>/overview`. Existing users can use `/login`; `/app` opens the first workspace or `/workspaces` when none exists.
+- [ ] Open `/w/<workspaceId>/settings`. If email is unverified, choose **Send verification email**. In local development open Mailpit at `http://localhost:8025`, follow your verification link to `/verify-email#<token>` and choose **Continue**, then **Open your workspace**. Return to Settings and confirm **Email verified**. Do not record the token.
+- [ ] If creating another workspace, open `/workspaces`, fill **New workspace name**, and **Create workspace**. Use that workspace's ID in the paths below. Open `/w/<workspaceId>/start` to begin.
 
 ## Discover, preview and create
 
@@ -25,8 +31,19 @@ Prepared from source on 11 November 2026. **Not yet executed in the GUI: final w
 - [ ] Return to Task recipes. Search `text cleanup`, **Preview** **Text cleanup**, **Create workspace draft**, then **Open workflow editor**, reaching `/w/<workspaceId>/workflows/<workflowId>/edit`.
 - [ ] Choose **Validate** (or **Save & validate** after edits). In **Draft preview** set **Input JSON** to `{"text":"Hello world","find":"world","replacement":"team"}` and choose **Preview**. Confirm **Output JSON** is `{"text":"Hello team"}` and step statuses appear. This uses a local approved tool, needs no provider and creates no durable full-run record.
 - [ ] Choose **Publish** after successful validation; confirm **Published version ready**. With the same Input JSON, choose **Run**. Confirm a durable run ID/state and follow **Open durable step debugger** to `/w/<workspaceId>/executions?kind=workflows&runId=<runId>`. Inspect persisted step evidence/output. A publish by itself must not submit a run; unsaved edits disable Run until saved/published again.
+- [ ] Also preview/create **Route requests by category**. In its workflow editor select **Route by category** and review the Switch cases and Default route. Validate, then locally preview `{"category":"billing"}`: expect `{"queue":"billing-team"}`. Repeat with `technical` for `technical-support` and `other` for `general-support`; only the selected route runs. Publish and Run one input, then inspect the selected branch and skipped alternatives in the durable debugger.
+- [ ] Preview/create **Remove duplicate contacts** and copy its Sample input. Select **Remove duplicates** in the editor and review `/items` as the source and `/email` as the comparison field. Validate and locally Preview: expect Ada's first record followed by Lin, `count: 2`, and `removed: 1`. Comparison is exact and case-sensitive; it keeps the first matching record in source order. Publish and Run the same input and confirm the persisted output matches. Both recipes work without a provider or external connection.
 - [ ] For a publication-required example, preview **Review and release** in Task recipes and copy its **Sample input**. Create its workspace draft and open the workflow editor. Select **Review record**. For a single-owner local test, explicitly enable **Allow the run requester to approve, if they are an owner or admin**; otherwise use a different owner/admin reviewer.
 - [ ] Save/validate the workflow and paste its sample into **Input JSON**. Confirm **Preview** is disabled because approval/timer steps need a published durable run. Choose **Publish**, then **Run**, then **Open durable step debugger**. Inspect the saved approval input and choose **Approve and continue** as the permitted reviewer. Confirm the five-second timer and final completion/output in workflow executions. If you choose **Reject run** instead, record that result rather than expecting the approval path. Agent/model/external-service steps likewise require published runs and their referenced connections/published agents.
+
+## Final GUI acceptance
+
+- [ ] Registration/login, email verification and workspace start completed in the selected browser.
+- [ ] Recipe search, category filtering, keyboard preview focus and workspace-draft handoff observed.
+- [ ] Attached skills reviewed/published before agent testing; the user's own provider key verified and model selected.
+- [ ] A real agent test completed with reviewed output and trace; agent publication completed separately.
+- [ ] Local workflow preview and a separately published durable run completed with matching expected output, including Switch/default routing and duplicate removal.
+- [ ] Approval/rejection and timer behavior observed with the intended reviewer permissions.
 
 ## Record the user's result
 
@@ -34,7 +51,9 @@ Record date, recipe, safe draft/run IDs, browser, completed boxes and safe error
 
 ## Source map
 
-All route directories below are under `frontend/src/app/w/[workspaceId]/`:
+Account routes are `frontend/src/app/{register,login,verify-email,app,workspaces}/page.tsx`; their forms are `features/auth/{auth-form,account-action}.tsx` and `features/workspace/workspace-start.tsx`. Email verification is offered by `features/workspace/settings-panel.tsx`.
+
+All workspace route directories below are under `frontend/src/app/w/[workspaceId]/`:
 
 | Path | Source for controls/behavior |
 |---|---|
@@ -45,4 +64,4 @@ All route directories below are under `frontend/src/app/w/[workspaceId]/`:
 | `workflows/[workflowId]/edit/page.tsx` | `features/workflows/workflow-builder.tsx`, `node-config.ts`, `node-config-forms.tsx` |
 | `executions/page.tsx`, `executions/[runId]/page.tsx` | `features/executions/workflow-console.tsx` and execution detail components |
 
-Recipe/sample definitions: `backend/app/modules/templates/{catalog,approval_starter}.py`; skill definitions: `backend/app/modules/skills/catalog.py`. Source checks confirm paths and controls exist; no GUI outcome is asserted here.
+Recipe/sample definitions: `backend/app/modules/templates/{catalog,approval_starter,practical_starters}.py`; skill definitions: `backend/app/modules/skills/catalog.py`. Source checks confirm paths and controls exist; no GUI outcome is asserted here.
