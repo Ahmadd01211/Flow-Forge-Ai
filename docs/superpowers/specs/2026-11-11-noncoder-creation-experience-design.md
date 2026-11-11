@@ -62,8 +62,8 @@ Create a new canvas that merges agent, workflow, provider and template configura
 
 The runtime already has a broad set of node types, so add high-leverage operations rather than re-labeling existing work:
 
-- **Switch:** route one value through named cases plus a default path, replacing chains of binary conditions for common status/priority routing. Before implementation, evolve the edge source-port contract compatibly: preserve existing `out`/`true`/`false` ports for old graph versions and condition nodes; give Switch cases stable IDs separate from editable labels; require exactly one default; define case deletion/rename behavior; and validate unknown case IDs before publication and preview. Keep case count bounded and make all outgoing paths visible and testable.
-- **Remove duplicates:** produce a stable unique list using an optional field path, preserving first-seen order and bounded JSON size. This is deterministic and complements the existing list filter and For each steps.
+- **Switch:** route one value through named cases plus a default path, replacing chains of binary conditions for common status/priority routing. Preserve existing `out`/`true`/`false` edge ports for old graphs and condition nodes; give Switch cases stable IDs separate from editable labels; require exactly one edge for each case and one default edge; labels can change without changing the edge, while removing a case removes its edge in the same editor action; validate stale/unknown case IDs before publication and preview. Limit Switch to eight cases. Keep all outgoing paths visible and testable.
+- **Remove duplicates:** produce a stable unique list using an optional field path, preserving first-seen order and bounded JSON size. Missing field paths preserve each item; an explicit `null` field is a valid value and repeated nulls collapse. This is deterministic and complements the existing list filter and For each steps.
 
 Each node must be present in the API graph schema, graph validation, preview/test form, runtime, trace display, builder palette and starter templates. Unknown or invalid branches must fail validation before publication.
 
