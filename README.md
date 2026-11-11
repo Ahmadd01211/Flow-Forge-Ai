@@ -8,7 +8,7 @@ User templates: save a draft in the agent editor or visual workflow builder, the
 
 Provider capabilities: Integrations now shows backend-owned execution/tool support and estimated token rates for 11 reviewed model IDs across the five providers. Refresh a model list using the saved key without rotating it. Other provider-listed models remain labeled setup only. See [supported scope and provider sources](docs/learning/10-PROVIDER-CAPABILITIES.md).
 
-Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0025` at startup.
+Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0032` at startup.
 
 MCP servers: owners/admins choose **Integrations → MCP servers → Add server** to connect any public HTTPS MCP server. Read-only tools start allowed; write tools stay blocked until allowed per tool. See [workspace MCP servers and tool policies](docs/learning/23-WORKSPACE-MCP-SERVERS.md).
 
@@ -43,7 +43,11 @@ The initializer preserves an existing `.env` and generates local secrets without
 - Guided GitHub and Slack recipes on top of approved HTTP tools.
 - Admin-approved HTTPS API tools with encrypted reusable header credentials and durable workflow action receipts.
 - Ten starter templates, including a working child/batch pair and service actions, plus user saving/sharing and portable private JSON import/export.
-- Docker Compose, PostgreSQL migrations through 0025, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
+- Docker Compose, PostgreSQL migrations through 0032, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
+- Guided agent workbench with reviewable assistant proposals, conversation memory, workspace skills and tool-aware testing.
+- Workflow chat and bounded model/tool nodes that remain within the existing graph validation and durable run path.
+- Workspace activity overview plus durable run traces and feedback tied to execution evidence.
+- OpenAPI contract and generated frontend types include the current workbench endpoints; local migration head is `0032`.
 
 Open **Tool Registry → HTTP API tools** to connect a fixed destination. Agents receive reviewed read-only GET grants; write actions execute through published workflows. Credentials never belong in instructions or URLs. Model budgets exclude service API charges. See [API tools and template files](docs/learning/17-HTTP-API-TOOLS-AND-TEMPLATE-FILES.md).
 

@@ -1,6 +1,6 @@
 # Project status
 
-Date: 1 November 2026 (Asia/Karachi).
+Date: 11 November 2026 (Asia/Karachi).
 
 ## Finish line
 
@@ -27,11 +27,28 @@ The user confirmed a complete local release first. Public hosting, subscriptions
 - MCP servers: owners/admins add any public HTTPS MCP server (URL and token encrypted) or connect operator-reviewed ones; read-only tools start allowed and write tools stay blocked until an admin allows them. Agents and workflows can call allowed write tools. Policy is checked at publication, submission and before every call.
 - Guided service recipes: GitHub list/create issues and Slack channel messages fill the existing HTTP tool permission form. They use admin-supplied tokens, not OAuth.
 
+## Guided workbench additions (11 November 2026)
+
+The guided agent/workflow workbench is implemented on the existing authoring and execution platform. The changes are organized along these current seams:
+
+- **Workspace overview:** `workspaces/overview.py` provides workspace-scoped summary data; the overview dashboard and model render the resulting activity and suggested next steps.
+- **Agent authoring:** `agents/workbench.py`, `assist.py`, and `managed.py` own workbench and assistant operations; the agent editor, builder blocks, chat, starter flows and test panel use the existing agent draft, validation and publication contracts.
+- **Workflow authoring:** `workflows/chat.py`, `llm.py`, `tools.py`, and node configuration extend the existing graph editor and runtime with bounded assistant/model/tool nodes. Workflow chat suggestions still enter the normal draft and validation path.
+- **Skills and memory:** the skills module provides workspace-scoped skill resources. Conversation memory uses its own persistence and remains separate from published definitions and execution records.
+- **Run evidence:** the execution trace service records safe events and feedback against durable runs; the run detail, trace and feedback components display persisted evidence.
+- **Persistence and API contract:** migrations `0026` through `0032` add workflow model agents, conversation memory, run source, agent playground, skills, run traces/feedback and builder assistants. `backend/openapi.json` and generated frontend types include the current API contract.
+
+This is a broad 106-file integration commit on `feature/local-release-continuation` (`3d1b4f2`), not an uncommitted working tree. The current local database reports migration `0032 (head)`.
+
 ## Evidence
 
 The full PostgreSQL/Redis suite passed 270 tests, including eighteen new composition cases. Eighteen frontend tests cover nested preview controls and deterministic server timestamps, alongside existing editor tests. Lint, type checking, generated API drift checks and production builds pass. A fresh Celery process completes a DAG through real Redis/PostgreSQL. The live stack also completed a two-customer batch with all nine scoped checkpoints; preview/durable outputs matched by JSON value. API readiness checks migrations, PostgreSQL and Redis. Encrypted backup and isolated restore rehearsal passed against migration 0022 without replacing live data.
 
-Migrations through 0024 are applied: user templates (0016), encrypted agent examples (0017), automation bindings (0018), quotas/reservations (0019), encrypted checkpoints (0020), approved HTTP tools (0021), the expanded checkpoint bound (0022), workflow pauses (0023), cron schedules (0024) and workspace MCP servers/tool policies (0025). Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
+Guided workbench verification (11 November 2026): `docker compose --profile test run --rm --build tests` passed **334 tests** in 140.68 seconds; `docker compose --profile test run --rm tests ruff check app tests migrations scripts` reported “All checks passed!”. Frontend Vitest passed **40 tests across 13 files**; ESLint, standalone TypeScript typecheck, API/OpenAPI drift check, and the Webpack production build passed. The first typecheck invocation overlapped the build and read regenerated `.next/types`; it was rerun alone after the build and passed. The local Compose stack reports API healthy, migration `0032 (head)`, `/health/ready` returns `{"status":"ready"}`, and the application root returns HTTP 200 at `http://localhost:8080`.
+
+An additional interactive signed-in browser smoke check was not completed in this session because the computer-use browser host was unavailable. Browser-level verification remains outstanding; no provider credentials or real external model calls were used.
+
+Migrations through `0032` are applied locally. Earlier migrations cover templates, examples, automation bindings, usage controls, workflow composition, schedules, tools, approvals and workspace policy; migrations `0026`–`0032` add the guided workbench capabilities listed above. Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
 
 The local stack is available at http://localhost:8080. Signed-in HTTP smoke checks cover editors, settings, integrations, API tools, templates, workflow executions, automations and usage. No shared demo password is provided. Disposable accounts were used for browser checks of Tool Registry, the loop builder/preview and per-item execution evidence. Timestamp hydration mismatches and clipped trace badges were corrected. The dashboard now shows real recorded usage rather than an obsolete runtime placeholder. Windows-mounted source refresh was changed to Webpack polling after stale rendered code was observed; this is the supported local development path.
 
@@ -62,5 +79,5 @@ Workspace owners/admins add MCP servers themselves; the operator catalog is opti
 - [Calendar (cron) schedules](learning/22-CRON-SCHEDULES.md)
 - [Workspace MCP servers and tool policies](learning/23-WORKSPACE-MCP-SERVERS.md)
 
-Repository: separate Git repository on main with an initial commit and ongoing uncommitted development. Pre-existing user work was preserved. Secrets and generated build data are ignored. The old ResearchPilot project was not accessed.
+Repository: `Ahmadd01211/Flow-Forge-Ai`, branch `feature/local-release-continuation`, at commit `3d1b4f2` for the verified baseline. That branch is pushed to GitHub; `main` remains unchanged. The working tree was clean before this status update. Secrets and generated build data are ignored. The old ResearchPilot project was not accessed.
 
