@@ -1,8 +1,71 @@
 import hashlib
 import json
+import re
 from collections import deque
 
+from fastapi import HTTPException
+
+from app.core.json_contracts import bounded_json
 from app.modules.workflows.schemas import Graph
+
+
+def switch_ports(config: dict) -> set[str]:
+    """Validate the Switch contract and return its current stable ports.
+
+    Raise ValueError so graph validation can return a node-local blocking issue.
+    IDs are persisted identities; labels and list order never determine routes.
+    """
+    try:
+        bounded_json(config, max_bytes=65536)
+    except (HTTPException, TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Switch settings must fit within the supported JSON limits.") from exc
+    reference = config.get("value")
+    if not isinstance(reference, dict):
+        raise ValueError("Choose a fixed value or a field from this step's input.")
+    if reference.get("kind") == "literal":
+        valid_reference = set(reference) == {"kind", "value"}
+    else:
+        pointer = reference.get("pointer")
+        valid_reference = (
+            reference.get("kind") == "input"
+            and set(reference) == {"kind", "pointer"}
+            and isinstance(pointer, str)
+            and len(pointer) <= 512
+            and (not pointer or pointer.startswith("/"))
+            and all(
+                part.replace("~1", "/").replace("~0", "~")
+                not in {"__proto__", "constructor", "prototype"}
+                for part in pointer.split("/")[1:]
+            )
+        )
+    if not valid_reference:
+        raise ValueError("Choose a fixed value or a safe input field path.")
+    cases = config.get("cases")
+    if not isinstance(cases, list) or not 1 <= len(cases) <= 8:
+        raise ValueError("Add between one and eight Switch cases.")
+    ports = {"default"}
+    values: set[str] = set()
+    for case in cases:
+        if not isinstance(case, dict) or set(case) != {"id", "label", "value"}:
+            raise ValueError("Every case needs an ID, label and scalar value.")
+        identity, label, value = case["id"], case["label"], case["value"]
+        if (
+            not isinstance(identity, str)
+            or re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", identity) is None
+            or identity in {"out", "true", "false", "default"}
+            or identity in ports
+        ):
+            raise ValueError("Use unique, non-reserved case IDs starting with a lowercase letter.")
+        if not isinstance(label, str) or not 1 <= len(label) <= 40:
+            raise ValueError("Case labels need one to forty characters.")
+        if type(value) not in (str, int, float, bool, type(None)):
+            raise ValueError("Case values must be text, numbers, booleans or null.")
+        canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        if canonical in values:
+            raise ValueError("Each Switch case needs a different value.")
+        values.add(canonical)
+        ports.add(identity)
+    return ports
 
 
 def validate_graph(graph: Graph) -> dict:
@@ -33,6 +96,16 @@ def validate_graph(graph: Graph) -> dict:
         error("RESULT_REQUIRED", "Use exactly one result node.")
     outgoing: dict[str, list] = {key: [] for key in nodes}
     incoming: dict[str, list] = {key: [] for key in nodes}
+    expected_ports: dict[str, set[str]] = {}
+    for node in graph.nodes:
+        if node.type == "switch":
+            try:
+                expected_ports[node.id] = switch_ports(node.config)
+            except ValueError as exc:
+                error("SWITCH_CONFIG_INVALID", str(exc), node.id, path="config")
+                expected_ports[node.id] = {"default"}
+        else:
+            expected_ports[node.id] = {"true", "false"} if node.type == "condition" else {"out"}
     seen_edges: set[tuple] = set()
     for edge in graph.edges:
         if edge.source not in nodes or edge.target not in nodes:
@@ -44,7 +117,7 @@ def validate_graph(graph: Graph) -> dict:
         seen_edges.add(signature)
         outgoing[edge.source].append(edge)
         incoming[edge.target].append(edge)
-        expected = {"true", "false"} if nodes[edge.source].type == "condition" else {"out"}
+        expected = expected_ports[edge.source]
         if edge.source_port not in expected:
             error("PORT_INVALID", "Choose a valid output port.", edge=edge.id)
         for mapping in edge.mappings:
@@ -115,6 +188,10 @@ def validate_graph(graph: Graph) -> dict:
             "true",
         ]:
             error("BRANCH_REQUIRED", "Connect exactly one true path and one false path.", node.id)
+        if node.type == "switch" and sorted(e.source_port for e in outgoing[node.id]) != sorted(
+            expected_ports[node.id]
+        ):
+            error("BRANCH_REQUIRED", "Connect exactly one path for each Switch case and the default path.", node.id)
     semantic = graph.model_dump()
     for node in semantic["nodes"]:
         node.pop("position")

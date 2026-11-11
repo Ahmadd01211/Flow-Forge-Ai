@@ -78,7 +78,7 @@ class WorkflowRunList(BaseModel):
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
-    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger", "agent", "llm", "tool", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait", "condition", "merge", "transform", "text_template", "list_filter", "json_parse", "result"]
+    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger", "agent", "llm", "tool", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait", "condition", "switch", "merge", "transform", "text_template", "list_filter", "json_parse", "result"]
     label: str = Field(min_length=1, max_length=100)
     position: Position
     join: Literal["all", "active"] = "all"
@@ -90,7 +90,7 @@ class Edge(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
     source: str
-    source_port: Literal["out", "true", "false"] = "out"
+    source_port: str = Field(default="out", min_length=1, max_length=40)
     target: str
     target_port: Literal["in"] = "in"
     mappings: list[dict] = Field(default_factory=list, max_length=64)
