@@ -273,3 +273,28 @@ def test_default_model_is_verified_and_scoped_to_provider(client, owner, monkeyp
         ]
         is None
     )
+
+
+def test_failed_refresh_preserves_catalog_and_default(client, owner, monkeypatch):
+    from app.core.errors import fail
+
+    monkeypatch.setattr(
+        "app.modules.integrations.service.verify_key", lambda _provider, _key: ["gpt-5-mini", "gpt-5"]
+    )
+    workspace = owner["workspaces"][0]["id"]
+    base = f"/api/v1/workspaces/{workspace}/integrations/providers/openai"
+    assert client.post(base, headers=headers(client), json={"api_key": KEY_A}).status_code == 200
+    chosen = client.patch(
+        f"{base}/default-model", headers=headers(client), json={"model_id": "gpt-5"}
+    ).json()
+
+    def reject(_provider, _key):
+        fail(503, "PROVIDER_UNAVAILABLE", "Provider verification is unavailable.")
+
+    monkeypatch.setattr("app.modules.integrations.service.verify_key", reject)
+    response = client.post(f"{base}/refresh-models", headers=headers(client))
+    assert response.status_code == 503 and KEY_A not in response.text
+    saved = client.get(f"/api/v1/workspaces/{workspace}/integrations").json()["items"][0]
+    assert saved["verified_models"] == chosen["verified_models"]
+    assert saved["default_model_id"] == "gpt-5"
+    assert saved["credential_generation"] == chosen["credential_generation"]
