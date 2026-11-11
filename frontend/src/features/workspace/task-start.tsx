@@ -12,7 +12,14 @@ export function TaskStart({ workspaceId }: { workspaceId: string }) {
       <PageHeader
         eyebrow="START A NEW AUTOMATION"
         title="Choose what to build"
-        description="Start with a guided task or open a blank editor. Your choices stay editable until you publish."
+        description="Start with a guided task or open a blank editor. Created drafts are workspace-visible and stay editable until you publish."
+        action={
+          <Button asChild>
+            <Link href={`${base}/templates`}>
+              Browse task recipes <ArrowRight size={15} />
+            </Link>
+          </Button>
+        }
       />
       <div className="task-start-grid">
         {startingChoices(base).map((choice) => (

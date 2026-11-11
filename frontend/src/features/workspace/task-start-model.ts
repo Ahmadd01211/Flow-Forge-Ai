@@ -10,13 +10,15 @@ export function startingChoices(base: string): StartingChoice[] {
     {
       key: "support-triage",
       title: "Support ticket triage",
-      description: "Start with an editable ticket classifier and try a sample ticket.",
+      description:
+        "Start with an editable ticket classifier and try a sample ticket.",
       href: `${base}/templates?focus=support-triage`,
     },
     {
       key: "blank-agent",
       title: "Start with a blank agent",
-      description: "Set up one focused assistant with your own instructions and fields.",
+      description:
+        "Set up one focused assistant with your own instructions and fields.",
       href: `${base}/agents/new`,
     },
     {
@@ -44,12 +46,27 @@ export function templatePresentation<T extends { key: string }>(
   items: T[],
   focus?: string,
 ): { template: T; recommended: boolean }[] {
-  const recommendedKey = focus && items.some((item) => item.key === focus)
-    ? focus
-    : undefined;
+  const recommendedKey =
+    focus && items.some((item) => item.key === focus) ? focus : undefined;
 
   return prioritizeTemplate(items, focus).map((template) => ({
     template,
     recommended: template.key === recommendedKey,
   }));
+}
+
+/** Discovery runs locally and never needs a model connection. */
+export function filterRecipes<
+  T extends { name: string; description: string; category: string },
+>(items: T[], query: string, category: string): T[] {
+  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  return items.filter(
+    (item) =>
+      (category === "all" || item.category === category) &&
+      words.every((word) =>
+        `${item.name} ${item.description} ${item.category}`
+          .toLocaleLowerCase()
+          .includes(word),
+      ),
+  );
 }
