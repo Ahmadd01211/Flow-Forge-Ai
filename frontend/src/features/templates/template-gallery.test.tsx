@@ -224,6 +224,97 @@ describe("guided recipes", () => {
 
   it.each([
     {
+      key: "switch-routing",
+      name: "Route requests by category",
+      category: "Workflow basics",
+      nodeType: "switch" as const,
+      sample: { category: "billing" },
+      expected: 'Returns {"queue": "billing-team"}.',
+    },
+    {
+      key: "remove-duplicates",
+      name: "Remove duplicate contacts",
+      category: "Data cleanup",
+      nodeType: "list_deduplicate" as const,
+      sample: {
+        items: [{ email: "ada@example.com" }, { email: "ada@example.com" }],
+      },
+      expected: "Keeps the first contact; count is 1 and removed is 1.",
+    },
+  ])(
+    "discovers and previews the local $key starter through the existing gallery",
+    async ({ key, name, category, nodeType, sample, expected }) => {
+      const recipe: TemplateEntry = {
+        key,
+        name,
+        category,
+        kind: "workflow",
+        template_version: 1,
+        description: "A local workflow starter",
+        setup_steps: [
+          "Preview the sample, validate, then publish for a durable run.",
+        ],
+        sample_input: sample,
+        expected_result: expected,
+      };
+      request
+        .mockResolvedValueOnce({
+          ...recipe,
+          graph: {
+            nodes: [{ id: "step", label: name, type: nodeType, config: {} }],
+          },
+        })
+        .mockResolvedValueOnce({
+          kind: "workflow",
+          id: "local-draft",
+          skill_ids: [],
+        });
+      render(
+        <TemplateGallery
+          workspaceId="ws-1"
+          templates={[agent, recipe]}
+          canCreate
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Category"), {
+        target: { value: category },
+      });
+      expect(screen.queryByRole("heading", { name: agent.name })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: `Preview ${name}` }));
+      const preview = await screen.findByRole("region", {
+        name: "Recipe preview",
+      });
+      expect(request).toHaveBeenCalledWith(`/templates/${key}`);
+      expect(within(preview).getByText(recipe.setup_steps![0])).toBeTruthy();
+      expect(within(preview).getByText(expected)).toBeTruthy();
+      expect(JSON.parse(preview.querySelector("pre")!.textContent!)).toEqual(
+        sample,
+      );
+      expect(
+        within(preview).getByText(/use local draft preview/i),
+      ).toBeTruthy();
+      fireEvent.click(
+        within(preview).getByRole("button", {
+          name: /create workspace draft/i,
+        }),
+      );
+      const created = await screen.findByRole("region", {
+        name: "Created workspace draft",
+      });
+      expect(request).toHaveBeenLastCalledWith(
+        `/workspaces/ws-1/templates/${key}/instantiate`,
+        { method: "POST" },
+      );
+      expect(
+        within(created)
+          .getByRole("link", { name: /open workflow editor/i })
+          .getAttribute("href"),
+      ).toBe("/w/ws-1/workflows/local-draft/edit");
+    },
+  );
+
+  it.each([
+    {
       nodes: [{ id: "text", label: "Text", type: "text", config: {} }],
       message: /local draft preview/i,
     },

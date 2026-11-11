@@ -3,6 +3,7 @@
 from app.modules.templates.action_starters import action_starters
 from app.modules.templates.approval_starter import approval_starter
 from app.modules.templates.composition_starters import composition_starters
+from app.modules.templates.practical_starters import practical_starters
 from app.modules.workflows.schemas import initial_graph
 
 
@@ -11,6 +12,7 @@ def templates() -> dict[str, dict]:
         **action_starters(),
         **approval_starter(),
         **composition_starters(),
+        **practical_starters(),
         "support-triage": {
             "key": "support-triage",
             "kind": "agent",

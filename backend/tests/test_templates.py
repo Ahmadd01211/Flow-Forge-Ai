@@ -33,6 +33,8 @@ def test_templates_create_workspace_editable_drafts(client, owner, db):
         "customer-profile-step",
         "batch-customer-profiles",
         "review-and-release",
+        "switch-routing",
+        "remove-duplicates",
     }
     agent = client.post(
         f"/api/v1/workspaces/{workspace}/templates/support-triage/instantiate",
