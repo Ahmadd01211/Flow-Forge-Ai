@@ -15,7 +15,7 @@ export type NodeTestState = {
   configKey?: string;
 };
 
-const ENTRY = ["manual_input", "webhook_trigger", "schedule_trigger"];
+const ENTRY = ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"];
 const pretty = (value: unknown) => JSON.stringify(value ?? null, null, 2);
 
 export function NodeTestPanel({ workspaceId, workflowId, graph, node, tests, setTest, sampleInput, blocked, externalTarget }: {
@@ -85,7 +85,7 @@ export function NodeTestPanel({ workspaceId, workflowId, graph, node, tests, set
     try {
       const result = await api<NodeTestResult>(`/workspaces/${workspaceId}/workflows/${workflowId}/nodes/${node.id}/test`, {
         method: "POST",
-        headers: node.type === "agent" ? { "Idempotency-Key": crypto.randomUUID() } : {},
+        headers: node.type === "agent" || node.type === "llm" ? { "Idempotency-Key": crypto.randomUUID() } : {},
         body: JSON.stringify({ graph, input, outputs, confirm_external: external && confirmed }),
       });
       setTest(node.id, { input: inputText, outputs: sources.length ? outputsText : undefined, result, configKey });
@@ -130,7 +130,7 @@ export function NodeTestPanel({ workspaceId, workflowId, graph, node, tests, set
         <div className="permission-callout">
           <ExternalLink size={17} />
           <div>
-            <p><strong>This test calls {externalTarget}.</strong> {node.type === "agent"
+            <p><strong>This test calls {externalTarget}.</strong> {node.type === "agent" || node.type === "llm"
               ? "It becomes a normal agent run: the agent's budget and the workspace limit of two active runs apply, and usage is recorded."
               : "Only read-only tools can be tested here; write tools run in a published workflow. Tests share the 20-per-minute MCP limit and are recorded in the audit log."}</p>
             <label className="checkbox-row">

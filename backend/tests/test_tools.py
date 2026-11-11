@@ -16,7 +16,7 @@ def test_tool_approval_invocation_and_revoke(client, owner, db):
     workspace = owner["workspaces"][0]["id"]
     base = f"/api/v1/workspaces/{workspace}/tools/json.extract"
     catalog = client.get(f"/api/v1/workspaces/{workspace}/tools").json()["items"]
-    assert {item["key"] for item in catalog} == {"json.extract", "text.replace"}
+    assert {item["key"] for item in catalog} == {"json.extract", "text.replace", "demo.order_lookup"}
     assert not any(item["installed"] for item in catalog)
     payload = {
         "input": {
@@ -298,3 +298,14 @@ def test_worker_executes_published_tool_grant(client, owner, monkeypatch):
     client.cookies.clear()
     register(client, "other-trace@example.com")
     assert client.get(f"/api/v1/workspaces/{workspace}/runs/{run['id']}/events").status_code == 404
+
+
+def test_demo_order_lookup_is_offline_sample_data():
+    from datetime import date, timedelta
+
+    from app.modules.tools.catalog import invoke
+
+    found = invoke("demo.order_lookup", {"order_id": " a-17 "})
+    assert found["found"] is True and found["sample_data"] is True and found["order_id"] == "A-17"
+    assert found["delivered_on"] == (date.today() - timedelta(days=13)).isoformat()
+    assert invoke("demo.order_lookup", {"order_id": "Z-404"}) == {"found": False, "order_id": "Z-404", "sample_data": True}

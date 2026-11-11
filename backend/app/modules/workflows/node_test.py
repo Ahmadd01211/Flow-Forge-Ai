@@ -21,7 +21,7 @@ from app.modules.mcp import service as mcp
 from app.modules.workflows.preview import run_step, validation
 from app.modules.workflows.schemas import Graph
 
-EXTERNAL_NODES = {"agent", "mcp_tool", "http_tool"}
+EXTERNAL_NODES = {"agent", "llm", "mcp_tool", "http_tool"}
 
 
 def run_node_test(
@@ -59,13 +59,24 @@ def run_node_test(
         "node_id": node.id, "type": node.type, "status": "completed", "output": None,
         "selected_port": None, "error": None, "duration_ms": 0, "external": external, "agent_run": None,
     }
-    if node.type == "agent":
+    if node.type in {"agent", "llm"}:
         if not idempotency_key:
             fail(422, "IDEMPOTENCY_KEY_REQUIRED", "Agent tests need an Idempotency-Key header.")
         master = load_master_key(settings.credential_key_path)
+        if node.type == "llm" and node.config.get("workflow_tools"):
+            from app.modules.workflows.tools import inspect
+            for grant in node.config["workflow_tools"]:
+                if inspect(db, workspace_id, grant, settings.mcp_catalog_json)[2]["has_external"]:
+                    fail(422, "WORKFLOW_TOOL_TEST_REQUIRES_RUN", "This step can start a workflow with external steps. Test it in a published run, which keeps receipts and budgets.")
+        if node.type == "llm":
+            # Test the editor's settings: freeze them into the step's hidden agent first.
+            from app.modules.workflows.llm import freeze
+            version_id = freeze(db, workspace_id, workflow_id, node, actor_id, settings.mcp_catalog_json).id
+        else:
+            version_id = uuid.UUID(node.config["version_id"])
         run, _ = executions.submit(
             db, workspace_id, actor_id,
-            RunCreate(version_id=uuid.UUID(node.config["version_id"]), input=input_data),
+            RunCreate(version_id=version_id, input=input_data),
             idempotency_key, master, raw_catalog=settings.mcp_catalog_json,
         )
         return {**result, "status": "queued", "agent_run": executions.public_run(run, master)}

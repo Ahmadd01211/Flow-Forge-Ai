@@ -8,6 +8,8 @@ import type {
 } from "@/lib/api/types";
 import type { ToolEntry } from "@/features/tools/tool-registry";
 import type { HttpTool } from "@/features/tools/http-tool-registry";
+import type { McpListing } from "@/features/workspace/mcp-connections";
+import type { SkillItem } from "@/features/agents/skills-model";
 export default async function AgentDetail({
   params,
   searchParams,
@@ -16,7 +18,7 @@ export default async function AgentDetail({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { workspaceId, agentId } = await params;
-  const [agent, versions, session, connections, tools, mcp, http, query] = await Promise.all([
+  const [agent, versions, session, connections, tools, mcp, http, skillList, query] = await Promise.all([
     serverApi<Agent>(`/workspaces/${workspaceId}/agents/${agentId}`),
     serverApi<VersionList>(
       `/workspaces/${workspaceId}/agents/${agentId}/versions`,
@@ -24,8 +26,9 @@ export default async function AgentDetail({
     serverApi<SessionData>("/auth/session"),
     serverApi<ConnectionList>(`/workspaces/${workspaceId}/integrations`),
     serverApi<{ items: ToolEntry[] }>(`/workspaces/${workspaceId}/tools`),
-    serverApi<{ items: { id: string; name: string; runnable_tools: string[]; runnable_schemas: Record<string, unknown>; tools: { name: string; read_only: boolean }[] }[] }>(`/workspaces/${workspaceId}/mcp`),
+    serverApi<McpListing>(`/workspaces/${workspaceId}/mcp`),
     serverApi<{ items: HttpTool[] }>(`/workspaces/${workspaceId}/http-tools`),
+    serverApi<{ items: SkillItem[] }>(`/workspaces/${workspaceId}/skills`),
     searchParams,
   ]);
   return (
@@ -39,9 +42,12 @@ export default async function AgentDetail({
       mcpServers={mcp.items}
       httpTools={http.items}
       initialTab={query.tab === "versions" ? "versions" : "instructions"}
+      mcpListing={mcp}
+      skills={skillList.items}
       canEdit={
         session.workspaces.find((w) => w.id === workspaceId)?.role !== "viewer"
       }
+      canManage={["owner", "admin"].includes(session.workspaces.find((w) => w.id === workspaceId)?.role ?? "")}
     />
   );
 }

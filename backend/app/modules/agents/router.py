@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.modules.agents import service
-from app.modules.agents.models import AgentVersion
+from app.modules.agents.models import AgentVersion, standalone_versions
 from app.modules.agents.readiness import assess
 from app.modules.agents.schemas import (
     AgentConfig,
@@ -43,7 +43,11 @@ def workflow_options(workspace_id: uuid.UUID, request: Request, db: Session = De
     authorize(request, db, workspace_id)
     versions = db.scalars(
         select(AgentVersion)
-        .where(AgentVersion.workspace_id == workspace_id, AgentVersion.purpose == "published")
+        .where(
+            AgentVersion.workspace_id == workspace_id,
+            AgentVersion.purpose == "published",
+            standalone_versions(),
+        )
         .order_by(AgentVersion.created_at.desc())
         .limit(100)
     ).all()

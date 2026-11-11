@@ -19,6 +19,7 @@ export interface ToolEntry {
 const examples: Record<string, string> = {
   "json.extract": '{"document":{"customer":{"email":"alex@example.com"}},"pointer":"/customer/email"}',
   "text.replace": '{"text":"Hello world","find":"world","replacement":"FlowForge"}',
+  "demo.order_lookup": '{"order_id":"A-17"}',
 };
 
 export function ToolRegistry({ workspaceId, initialTools, initialHttpTools, canManage, canTest }: {

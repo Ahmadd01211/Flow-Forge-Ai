@@ -16,6 +16,7 @@ from app.core.config import Settings
 from app.core.db import make_sessions
 from app.modules.agents.evaluations import router as agent_evaluations
 from app.modules.agents.router import router as agents
+from app.modules.agents.workbench import router as agent_workbench
 from app.modules.audit.router import router as activity
 from app.modules.automations.router import router as automations
 from app.modules.automations.router import webhooks
@@ -26,6 +27,7 @@ from app.modules.http_tools.router import router as http_tools
 from app.modules.identity.router import router as identity
 from app.modules.integrations.router import router as integrations
 from app.modules.mcp.router import router as mcp
+from app.modules.skills.router import router as skills
 from app.modules.templates.router import router as templates
 from app.modules.tools.router import router as tools
 from app.modules.workflows.router import router as workflows
@@ -158,8 +160,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         workspaces,
         activity,
         usage,
+        # Before `agents`, so /agents/library is not read as an agent ID.
+        agent_workbench,
         agents,
         agent_evaluations,
+        skills,
         automations,
         webhooks,
         integrations,

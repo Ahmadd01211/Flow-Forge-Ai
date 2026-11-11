@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
 import httpx
 from fastapi import HTTPException
@@ -319,6 +320,18 @@ FUNCTIONS = {
             "additionalProperties": False,
         },
     },
+    "demo.order_lookup": {
+        "type": "function",
+        "name": "lookup_order",
+        "description": "Look up a Northwind Outdoor order by ID (sample demo data).",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {"order_id": {"type": "string"}},
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+    },
 }
 
 
@@ -390,10 +403,80 @@ def _trace(
         with sessions() as db:
             run = db.scalar(select(AgentRun).where(AgentRun.id == run_id).with_for_update())
             if run and run.state == "running" and run.claim_token == token:
+                if "detail" in details:
+                    details["master"] = load_master_key(settings.credential_key_path)
                 append_event(db, run, kind, status, **details)
                 db.commit()
     finally:
         sessions.kw["bind"].dispose()
+
+
+TRACE_VALUE_BYTES = 8000
+
+
+def _clip(value: object) -> object:
+    """Keep trace payloads small: oversized values are replaced by a truncated preview."""
+    text = json.dumps(value, ensure_ascii=False, default=str)
+    return value if len(text.encode()) <= TRACE_VALUE_BYTES else {"truncated": True, "preview": text[:TRACE_VALUE_BYTES]}
+
+
+def uses_tools(config: dict) -> bool:
+    """Whether a run needs the tool loop: any tool grant, or skills the model loads on demand."""
+    return bool(
+        config.get("tool_keys") or config.get("mcp_tools") or config.get("http_tools") or config.get("workflow_tools")
+        or (config.get("skills") and config.get("skill_loading", "on_demand") == "on_demand")
+    )
+
+
+def prepared(version):
+    """The version as the model should see it: instructions plus its skills.
+
+    On-demand skills add a short catalog the model loads from with use_skill; inline skills (for
+    models without tool calls) add their full text. Versions without skills pass through.
+    """
+    config = version.config
+    skills = config.get("skills") or []
+    if not skills:
+        return version
+    if config.get("skill_loading") == "inline":
+        sections = []
+        for skill in skills:
+            examples = "".join(
+                f"\nExample input: {item['input']}\nExample output: {item['output']}" for item in skill.get("examples", [])
+            )
+            sections.append(f"### {skill['name']}\n{skill['instructions']}{examples}")
+        extra = "\n\n## Skills\n" + "\n\n".join(sections)
+    else:
+        catalog = "\n".join(f"- {skill['name']}: {skill['description']}" for skill in skills)
+        extra = f"\n\n## Skills\nBefore handling a request a skill covers, load it with the use_skill tool:\n{catalog}"
+    return SimpleNamespace(
+        id=version.id, workspace_id=version.workspace_id, agent_id=version.agent_id, connection_id=version.connection_id,
+        credential_generation=version.credential_generation, name=version.name, number=version.number,
+        config={**config, "instructions": config["instructions"] + extra},
+    )
+
+
+def _local_workflow(settings: Settings, workspace_id: uuid.UUID) -> Callable[[dict, dict, float], object]:
+    """Run tool workflows outside a workflow run: only children without external steps."""
+
+    def call(grant: dict, arguments: dict, remaining: float) -> object:
+        from app.modules.workflows.preview import run_preview
+        from app.modules.workflows.tools import inspect
+
+        sessions = make_sessions(settings.database_url)
+        try:
+            with sessions() as db:
+                version, graph, checked = inspect(db, workspace_id, grant, settings.mcp_catalog_json)
+                if checked["has_external"]:
+                    raise ProviderFailure("WORKFLOW_TOOL_REQUIRES_RUN", uncertain=True)
+                return run_preview(
+                    db, workspace_id, graph, arguments, mcp_catalog_json=settings.mcp_catalog_json,
+                    max_seconds=min(remaining, 5), root_workflow_id=version.workflow_id,
+                )["output"]
+        finally:
+            sessions.kw["bind"].dispose()
+
+    return call
 
 
 def generate_openai_with_tools(
@@ -407,23 +490,42 @@ def generate_openai_with_tools(
     claim_token: uuid.UUID | None = None,
     active_check: Callable[[], bool] | None = None,
     budget_override: Decimal | None = None,
+    run_workflow: Callable[[dict, dict, float], object] | None = None,
 ) -> tuple[dict, int, int]:
-    """Stateless function-call loop; version grants and live installation both gate each call."""
+    """Stateless function-call loop; version grants and live installation both gate each call.
+
+    `run_workflow(grant, arguments, remaining_seconds)` starts a tool workflow; workflow runs pass
+    a durable runner, and other runs fall back to local-only execution.
+    """
     from app.modules.http_tools.service import alias as http_alias
     from app.modules.http_tools.service import invoke_agent as invoke_http
     from app.modules.mcp.agent_grants import alias
     from app.modules.mcp.agent_grants import invoke as invoke_mcp
+    from app.modules.workflows.tools import MAX_WORKFLOW_TOOL_CALLS
+    from app.modules.workflows.tools import alias as workflow_alias
     grants = version.config["tool_keys"]
     names = {FUNCTIONS[tool_key]["name"]: tool_key for tool_key in grants}
     remote = {"mcp:" + alias(g): g for g in version.config.get("mcp_tools", [])}
     names.update({alias(g): key for key, g in remote.items()})
     http_remote = {"http:" + http_alias(g): g for g in version.config.get("http_tools", [])}
     names.update({http_alias(g): key for key, g in http_remote.items()})
+    workflow_remote = {"workflow:" + workflow_alias(g): g for g in version.config.get("workflow_tools", [])}
+    names.update({workflow_alias(g): key for key, g in workflow_remote.items()})
+    workflow_calls = 0
+    loading = version.config.get("skill_loading", "on_demand")
+    skills = {skill["name"]: skill for skill in version.config.get("skills", [])} if loading == "on_demand" else {}
+    if skills:
+        names["use_skill"] = "skill:use"
     functions = [FUNCTIONS[tool_key] for tool_key in grants] + [
         {"type": "function", "name": alias(g), "description": (g["server_id"] + "/" + g["tool_name"] + ": " + g.get("description", ""))[:500],
          "parameters": g["input_schema"], "strict": False} for g in remote.values()] + [
         {"type": "function", "name": http_alias(g), "description": (g["name"] + ": " + g.get("description", ""))[:500],
-         "parameters": g["input_schema"], "strict": False} for g in http_remote.values()]
+         "parameters": g["input_schema"], "strict": False} for g in http_remote.values()] + [
+        {"type": "function", "name": workflow_alias(g), "description": ("Run the workflow " + g["name"] + ". " + g.get("description", ""))[:500],
+         "parameters": g["input_schema"], "strict": False} for g in workflow_remote.values()] + ([
+        {"type": "function", "name": "use_skill", "description": "Load the full instructions and examples for one of your skills.",
+         "parameters": {"type": "object", "properties": {"skill": {"type": "string", "enum": sorted(skills)}}, "required": ["skill"], "additionalProperties": False},
+         "strict": False}] if skills else [])
     transcript: list = [{"role": "user", "content": json.dumps(input_data, ensure_ascii=False)}]
     total_input = total_output = calls = 0
     finalizing = False
@@ -508,14 +610,22 @@ def generate_openai_with_tools(
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=True)
         if active_check is not None and not active_check():
             raise ProviderFailure("RUN_INTERRUPTED", uncertain=True)
-        if tool_key not in remote and tool_key not in http_remote and not _tool_approved(settings, version.workspace_id, tool_key):
+        if tool_key not in remote and tool_key not in http_remote and tool_key not in workflow_remote and tool_key != "skill:use" and not _tool_approved(settings, version.workspace_id, tool_key):
             raise ProviderFailure("TOOL_APPROVAL_REVOKED", uncertain=True)
         _trace(settings, run_id, claim_token, "tool", "started", tool_key=tool_key)
+        arguments = None
         try:
             arguments = json.loads(call["arguments"])
             if not isinstance(arguments, dict):
                 raise ValueError
-            if tool_key in remote:
+            if tool_key == "skill:use":
+                skill = skills.get(arguments.get("skill"))
+                if not skill:
+                    raise ValueError
+                # Trace which skill loaded, so the timeline reads "skill:Brand voice".
+                tool_key = f"skill:{skill['name']}"[:80]
+                tool_output = {"skill": skill["name"], "instructions": skill["instructions"], "examples": skill.get("examples", [])}
+            elif tool_key in remote:
                 remaining_time = timeout - (time.monotonic() - started)
                 if remaining_time < 1:
                     raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
@@ -525,6 +635,15 @@ def generate_openai_with_tools(
                 if remaining_time < 1:
                     raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
                 tool_output = invoke_http(settings, version.workspace_id, http_remote[tool_key], arguments, remaining_time)
+            elif tool_key in workflow_remote:
+                remaining_time = timeout - (time.monotonic() - started)
+                if remaining_time < 1:
+                    raise ProviderFailure("RUN_TIMEOUT", uncertain=True)
+                if workflow_calls >= MAX_WORKFLOW_TOOL_CALLS:
+                    raise ProviderFailure("WORKFLOW_TOOL_CALL_LIMIT", uncertain=True)
+                workflow_calls += 1
+                runner = run_workflow or _local_workflow(settings, version.workspace_id)
+                tool_output = {"output": runner(workflow_remote[tool_key], arguments, remaining_time)}
             elif tool_key == "json.extract":
                 arguments = {
                     "document": json.loads(arguments["document_json"]),
@@ -535,8 +654,9 @@ def generate_openai_with_tools(
                 tool_output = invoke(tool_key, arguments)
         except HTTPException as exc:
             code = exc.detail.get("code", "TOOL_INPUT_INVALID") if isinstance(exc.detail, dict) else "TOOL_INPUT_INVALID"
-            if (tool_key in remote or tool_key in http_remote) and code not in {"MCP_INPUT_SCHEMA_INVALID", "HTTP_INPUT_SCHEMA_INVALID", "HTTP_QUERY_INVALID", "HTTP_QUERY_TOO_LARGE", "PAYLOAD_TOO_LARGE"}:
-                _trace(settings, run_id, claim_token, "tool", "failed", tool_key=tool_key, error_code=code)
+            if (tool_key in remote or tool_key in http_remote or tool_key in workflow_remote) and code not in {"MCP_INPUT_SCHEMA_INVALID", "HTTP_INPUT_SCHEMA_INVALID", "HTTP_QUERY_INVALID", "HTTP_QUERY_TOO_LARGE", "PAYLOAD_TOO_LARGE", "SUBWORKFLOW_INPUT_INVALID", "INPUT_SCHEMA_INVALID"}:
+                _trace(settings, run_id, claim_token, "tool", "failed", tool_key=tool_key, error_code=code,
+                       detail={"arguments": _clip(arguments), "output": None})
                 raise ProviderFailure(code, uncertain=True) from None
             tool_output = {"error": "TOOL_INPUT_INVALID"}
         except (ValueError, KeyError, TypeError):
@@ -549,6 +669,7 @@ def generate_openai_with_tools(
             "failed" if "error" in tool_output else "completed",
             tool_key=tool_key,
             error_code=tool_output.get("error"),
+            detail={"arguments": _clip(arguments), "output": _clip(tool_output)},
         )
         calls += 1
         transcript.extend(items)
@@ -733,6 +854,16 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                     master, run.workspace_id, run.id, 1, run.input_nonce, run.input_ciphertext
                 )
             )
+            from app.modules.agents import memory
+            try:
+                memory_key = memory.conversation_key(version.config, input_data)
+            except HTTPException as exc:
+                run.state, run.error_code, run.finished_at = "failed", exc.detail.get("code", "MEMORY_KEY_MISSING"), now
+                db.commit()
+                return
+            model_data = memory.model_input(input_data, memory.history(
+                db, master, run.workspace_id, version.agent_id, memory_key, version.config["memory"]["max_turns"],
+            )) if memory_key else input_data
             run.state = "running"
             run.started_at = now
             run.claim_token = token
@@ -757,15 +888,15 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 return
             timeout = min(30.0, max(1.0, (run.deadline_at - now).total_seconds()))
             run.model_started_at = now
-            if not version.config.get("tool_keys") and not version.config.get("mcp_tools") and not version.config.get("http_tools"):
+            if not uses_tools(version.config):
                 append_event(db, run, "model", "started")
             db.commit()
         try:
-            if version.config.get("tool_keys") or version.config.get("mcp_tools") or version.config.get("http_tools"):
+            if uses_tools(version.config):
                 output, input_tokens, output_tokens = generate_openai_with_tools(
                     key,
-                    version,
-                    input_data,
+                    prepared(version),
+                    model_data,
                     run.max_output_tokens,
                     timeout,
                     settings,
@@ -774,7 +905,7 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                 )
             else:
                 output, input_tokens, output_tokens = generate(
-                    key, version, input_data, run.max_output_tokens, timeout
+                    key, prepared(version), model_data, run.max_output_tokens, timeout
                 )
                 input_tokens, output_tokens = checked_usage(input_tokens, output_tokens)
                 _trace(
@@ -829,6 +960,8 @@ def execute(run_id: str, settings: Settings | None = None) -> None:
                     if now >= run.deadline_at and not run.cancel_requested_at
                     else None
                 )
+                if memory_key and run.state == "completed":
+                    memory.remember(db, master, run.workspace_id, version.agent_id, memory_key, input_data, output, version.config["memory"])
             append_event(db, run, "run", run.state, error_code=run.error_code)
             db.commit()
     finally:

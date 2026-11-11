@@ -41,8 +41,11 @@ def _safe_pointer(path: object) -> bool:
     )
 
 
-ENTRY_NODES = {"manual_input", "webhook_trigger", "schedule_trigger"}
+ENTRY_NODES = {"manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"}
 LOCAL_NODES = ENTRY_NODES | {"tool", "transform", "condition", "merge", "text_template", "list_filter", "json_parse", "result"}
+# An inline LLM step is published as a hidden agent version, so it runs and counts as an agent.
+AGENT_NODES = {"agent", "llm"}
+EXTERNAL_NODES = AGENT_NODES | {"mcp_tool", "http_tool"}
 
 
 def _always_before(graph: Graph, node_id: str, upstream: set[str]) -> set[str]:
@@ -107,7 +110,7 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
     result = validate_graph(graph)
     context = _context if _context is not None else {"versions": {}, "checks": {}, "inspected_nodes": 0}
     ancestry = (*_ancestry, root_workflow_id) if root_workflow_id else _ancestry
-    result.update(expanded_steps=len(graph.nodes), agent_steps=sum(node.type == "agent" for node in graph.nodes), has_external=any(node.type in {"agent", "mcp_tool", "http_tool"} for node in graph.nodes), has_pause=any(node.type in PAUSE_NODES for node in graph.nodes), pause_seconds=0)
+    result.update(expanded_steps=len(graph.nodes), agent_steps=sum(node.type in AGENT_NODES for node in graph.nodes), has_external=any(node.type in EXTERNAL_NODES for node in graph.nodes), has_pause=any(node.type in PAUSE_NODES for node in graph.nodes), pause_seconds=0)
     context["inspected_nodes"] += len(graph.nodes)
     if context["inspected_nodes"] > 400:
         result["errors"].append({"code": "SUBWORKFLOW_DEPENDENCY_LIMIT", "message": "This dependency tree is too large to inspect. Reduce the number of reusable workflows.", "node_id": None, "edge_id": None, "path": None})
@@ -131,7 +134,10 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
         )
     )
     approved_servers = registry.servers(db, workspace_id, mcp_catalog_json)
+    from app.modules.workflows.chat import CHAT_SAMPLE
     for node in graph.nodes:
+        if node.type == "chat_trigger" and example_errors(graph.input_schema, CHAT_SAMPLE, "input"):
+            result["errors"].append({"code": "CHAT_INPUT_INCOMPATIBLE", "message": "A chat trigger sends conversation_id and message. Make the workflow input schema accept them.", "node_id": node.id, "edge_id": None, "path": "input_schema"})
         upstream = _upstream(graph, node.id) if node.type == "result" else None
         config_errors, config_warnings = config_issues(
             node, upstream, _always_before(graph, node.id, upstream) if upstream is not None else None
@@ -192,7 +198,16 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
             if not valid:
                 result["errors"].append({"code": "MCP_TOOL_UNAVAILABLE", "message": "Connect this MCP server and allow the tool, or republish after its connection changes.", "node_id": node.id, "edge_id": None, "path": "config.tool_name"})
             continue
-        if node.type == "agent":
+        if node.type == "llm" and "version_id" not in node.config:
+            from app.modules.workflows.llm import issues as llm_issues
+            llm_errors, llm_warnings = llm_issues(db, workspace_id, node, mcp_catalog_json)
+            result["errors"].extend(llm_errors)
+            result["warnings"].extend(llm_warnings)
+            if node.config.get("workflow_tools"):
+                from app.modules.workflows.tools import expansion
+                result["expanded_steps"] += expansion(db, workspace_id, node.config["workflow_tools"], mcp_catalog_json)
+            continue
+        if node.type in AGENT_NODES:
             try:
                 version_id = uuid.UUID(node.config.get("version_id", ""))
             except (ValueError, TypeError, AttributeError):
@@ -222,7 +237,10 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
                     "code": "AGENT_CREDENTIAL_CHANGED", "message": "The agent credential changed. Publish a new agent version.",
                     "node_id": node.id, "edge_id": None, "path": "config.version_id",
                 })
-            if version and (version.config.get("mcp_tools") or version.config.get("http_tools")):
+            if version and version.config.get("workflow_tools"):
+                from app.modules.workflows.tools import expansion
+                result["expanded_steps"] += expansion(db, workspace_id, version.config["workflow_tools"], mcp_catalog_json)
+            if version and (version.config.get("mcp_tools") or version.config.get("http_tools") or version.config.get("workflow_tools")):
                 from app.modules.agents.tool_grants import validate_grants
                 try:
                     validate_grants(db, workspace_id, version.config, mcp_catalog_json)
@@ -261,11 +279,11 @@ def validation(db: Session, workspace_id: uuid.UUID, graph: Graph, mcp_catalog_j
     result["publishable"] = (
         result["valid"]
         and len(graph.nodes) <= 30
-        and all(node.type in LOCAL_NODES | COMPOSITE_NODES | PAUSE_NODES | {"agent", "mcp_tool", "http_tool"} for node in graph.nodes)
-        and sum(node.type == "agent" for node in graph.nodes) <= 4
+        and all(node.type in LOCAL_NODES | COMPOSITE_NODES | PAUSE_NODES | EXTERNAL_NODES for node in graph.nodes)
+        and sum(node.type in AGENT_NODES for node in graph.nodes) <= 4
     )
     if result["valid"] and not result["publishable"]:
-        result["warnings"].append({"code": "RUNTIME_SIZE_LIMIT", "message": "Published workflows support up to 30 steps and four agent nodes.", "node_id": None, "edge_id": None, "path": None})
+        result["warnings"].append({"code": "RUNTIME_SIZE_LIMIT", "message": "Published workflows support up to 30 steps and four agent or LLM steps.", "node_id": None, "edge_id": None, "path": None})
     return result
 
 
@@ -320,7 +338,7 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
         if not isinstance(data, dict):
             fail(422, "TOOL_INPUT_INVALID", "Tool step input must be a JSON object.")
         output = invoke(node.config["tool_key"], data)
-    elif node.type == "agent":
+    elif node.type in AGENT_NODES:
         if not isinstance(data, dict) or not agent_handler:
             fail(422, "AGENT_INPUT_INVALID", "Agent step input must be a JSON object.")
         output, usage = agent_handler(node, data)
@@ -399,7 +417,7 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
         output = _resolve(reference, data, outputs) if isinstance(reference, dict) and reference.get("kind") == "output" else data
     bounded_json(output, max_bytes=65536)
     step = {"node_id": node.id, "type": node.type, "status": "completed", "output": output}
-    if node.type == "agent":
+    if node.type in AGENT_NODES:
         step["usage"] = usage
     if node.type == "condition":
         step["selected_port"] = branch
@@ -421,7 +439,7 @@ def run_preview(
         from app.modules.workflows.composition import preview_handler
         composition_handler = preview_handler(db, workspace_id, mcp_catalog_json, time.monotonic() + min(max_seconds, graph.limits.get("timeout_seconds", 60)), (root_workflow_id,) if root_workflow_id else ())
     if not result["publishable"] or any(
-        node.type not in (LOCAL_NODES | (PAUSE_NODES if pause_handler else set()) | (COMPOSITE_NODES if composition_handler else set()) | ({"agent"} if agent_handler else set()) | ({"mcp_tool"} if mcp_handler else set()) | ({"http_tool"} if http_handler else set())) for node in graph.nodes
+        node.type not in (LOCAL_NODES | (PAUSE_NODES if pause_handler else set()) | (COMPOSITE_NODES if composition_handler else set()) | (AGENT_NODES if agent_handler else set()) | ({"mcp_tool"} if mcp_handler else set()) | ({"http_tool"} if http_handler else set())) for node in graph.nodes
     ):
         fail(
             422,

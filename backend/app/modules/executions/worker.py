@@ -62,7 +62,7 @@ def reconcile_workflows_once() -> int:
                     run.error_code = None if run.cancel_requested_at else "RUN_TIMEOUT"
                     if run.external_started_at and run.cost_usd is None:
                         version = db.scalar(select(WorkflowVersion).where(WorkflowVersion.id == run.version_id))
-                        if version and any(node.get("type") == "agent" for node in version.graph.get("nodes", [])):
+                        if version and any(node.get("type") in ("agent", "llm") for node in version.graph.get("nodes", [])):
                             run.uncertain_cost_usd = Decimal(version.graph["limits"]["max_cost_usd"])
                     run.finished_at = now
                     run.claim_token = None
@@ -159,11 +159,13 @@ def maintenance_loop() -> None:
             from app.modules.automations.service import tick
             tick(settings)
             reconcile_workflows_once()
+            from app.modules.agents.memory import purge_expired
             from app.modules.identity.mail import deliver_pending
             sessions = make_sessions(settings.database_url)
             try:
                 with sessions() as db:
                     deliver_pending(db, settings)
+                    purge_expired(db)
             finally:
                 sessions.kw["bind"].dispose()
         except Exception as exc:

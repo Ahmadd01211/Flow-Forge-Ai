@@ -10,6 +10,7 @@ import {
   templatePlaceholders,
   upstreamIds,
   requiresPublishedRun,
+  replyText,
 } from "./node-config";
 
 const node = (
@@ -23,6 +24,19 @@ const node = (
   join: "all",
   config,
   policy: {},
+});
+
+describe("LLM steps", () => {
+  it("need a published run and summarise model and tool count", () => {
+    expect(requiresPublishedRun([node("llm", {})], [])).toBe(true);
+    expect(configSummary(node("llm", { model_id: "gpt-5-mini", tool_keys: ["text.replace"], http_tools: [{ tool_id: "x" }] }))).toBe("gpt-5-mini · 2 tools");
+    expect(configSummary(node("llm", { model_id: "" }))).toBeNull();
+  });
+  it("shows a chat reply field as text and anything else as JSON", () => {
+    expect(replyText({ reply: "Order A-17 has shipped." })).toBe("Order A-17 has shipped.");
+    expect(replyText("plain")).toBe("plain");
+    expect(replyText({ status: "shipped" })).toBe(JSON.stringify({ status: "shipped" }, null, 2));
+  });
 });
 
 describe("nested workflow safety", () => {

@@ -14,6 +14,7 @@ from app.core.errors import fail
 from app.modules.audit.service import record
 from app.modules.identity.service import check_csrf
 from app.modules.workflows import runtime
+from app.modules.workflows.chat import ChatMessage, chat_version
 from app.modules.workflows.checkpoints import rows as checkpoint_rows
 from app.modules.workflows.checkpoints import view as checkpoint_view
 from app.modules.workflows.models import Workflow, WorkflowRun, WorkflowVersion
@@ -143,6 +144,31 @@ def validate(
         "revision": row.revision,
         **validation(db, workspace_id, Graph.model_validate(row.graph), request.app.state.settings.mcp_catalog_json, root_workflow_id=workflow_id),
     }
+
+
+@router.post("/{workflow_id}/chat", status_code=202, dependencies=[Depends(check_csrf)])
+def send_chat_message(
+    workspace_id: uuid.UUID,
+    workflow_id: uuid.UUID,
+    body: ChatMessage,
+    request: Request,
+    response: Response,
+    idempotency_key: str = Header(alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Start a run of the latest published version with one chat message."""
+    _, member = authorize(request, db, workspace_id, write=True)
+    find(db, workspace_id, workflow_id)
+    version = chat_version(db, workspace_id, workflow_id)
+    conversation_id = body.conversation_id or str(uuid.uuid4())
+    master = load_master_key(request.app.state.settings.credential_key_path)
+    run, created = runtime.submit(
+        db, workspace_id, member.user_id, version.id, {"conversation_id": conversation_id, "message": body.message},
+        idempotency_key, master, mcp_catalog_json=request.app.state.settings.mcp_catalog_json, source="chat",
+    )
+    if not created:
+        response.status_code = 200
+    return {"conversation_id": conversation_id, "version_id": version.id, "run": runtime.public_run(run, master)}
 
 
 @router.post("/{workflow_id}/check", dependencies=[Depends(check_csrf)])
@@ -342,7 +368,7 @@ def replay_workflow(workspace_id: uuid.UUID, run_id: uuid.UUID, body: ReplayInpu
     value = json.loads(decrypt_secret(master, workspace_id, source.id, 1, source.input_nonce, source.input_ciphertext))
     run, created = runtime.submit(db, workspace_id, member.user_id, source.version_id, value,
                                   f"replay:{source.id}:" + hashlib.sha256(idempotency_key.encode()).hexdigest(),
-                                  master, mcp_catalog_json=request.app.state.settings.mcp_catalog_json, commit=False)
+                                  master, mcp_catalog_json=request.app.state.settings.mcp_catalog_json, commit=False, source="replay")
     if created:
         record(db, workspace_id, member.user_id, "workflow_run.replayed", run.id, {"source_run_id": str(source.id)})
     else:

@@ -100,3 +100,25 @@ class RunEvent(Base):
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Encrypted {"arguments", "output"} of a tool step, for the run trace.
+    nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+
+
+class RunFeedback(Base):
+    """One person's thumbs up or down on an agent run, with an optional comment."""
+
+    __tablename__ = "agent_run_feedback"
+    __table_args__ = (
+        ForeignKeyConstraint(["workspace_id", "run_id"], ["agent_run.workspace_id", "agent_run.id"]),
+        UniqueConstraint("run_id", "created_by", name="uq_agent_run_feedback_author"),
+        CheckConstraint("rating IN ('up','down')", name="valid_rating"),
+        Index("ix_agent_run_feedback_run", "workspace_id", "run_id"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    rating: Mapped[str] = mapped_column(String(10), nullable=False)
+    comment: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

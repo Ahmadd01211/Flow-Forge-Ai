@@ -73,8 +73,12 @@ class Checkpoints:
         parent_node_id=None,
         iteration_index=None,
         workflow_version_id=None,
+        hold_inflight=False,
     ):
         self.sessions, self.workspace_id, self.run_id = sessions, workspace_id, run_id
+        # Set for workflows started from a model's tool loop: the model call is still in flight,
+        # so finishing an external child step must not mark the run as safely replayable.
+        self.hold_inflight = hold_inflight
         self.claim_token, self.master = claim_token, master
         self.path, self.parent_node_id = tuple(path), parent_node_id
         self.iteration_index, self.workflow_version_id = iteration_index, workflow_version_id
@@ -87,7 +91,7 @@ class Checkpoints:
             else node_id
         )
 
-    def child(self, node, version_id, iteration=None):
+    def child(self, node, version_id, iteration=None, hold_inflight=None):
         component = node.id + (f"[{iteration}]" if iteration is not None else "")
         return Checkpoints(
             self.sessions,
@@ -99,6 +103,7 @@ class Checkpoints:
             parent_node_id=self.identity(node.id),
             iteration_index=iteration,
             workflow_version_id=str(version_id),
+            hold_inflight=self.hold_inflight if hold_inflight is None else hold_inflight,
         )
 
     def bind_scope(self, ceiling, deadline, entry_id):
@@ -238,7 +243,7 @@ class Checkpoints:
             row.nonce, row.ciphertext = encrypt_secret(
                 self.master, self.workspace_id, row.id, 1, payload
             )
-            if step["status"] == "completed" and node.type in {"agent", "mcp_tool", "http_tool"}:
+            if step["status"] == "completed" and node.type in {"agent", "llm", "mcp_tool", "http_tool"} and not self.hold_inflight:
                 run.external_inflight = False
             db.commit()
 

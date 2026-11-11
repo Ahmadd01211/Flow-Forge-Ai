@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import fail
-from app.modules.agents.models import AgentVersion
+from app.modules.agents.models import AgentVersion, standalone_versions
 from app.modules.audit.service import record
 from app.modules.deployments.models import Deployment
 from app.modules.executions.models import AgentRun
@@ -51,7 +51,7 @@ def _agent_ready(
     from fastapi import HTTPException
 
     from app.modules.agents.tool_grants import validate_grants
-    if version.config.get("mcp_tools") or version.config.get("http_tools"):
+    if version.config.get("mcp_tools") or version.config.get("http_tools") or version.config.get("workflow_tools"):
         try:
             validate_grants(db, version.workspace_id, version.config, raw_catalog)
         except HTTPException:
@@ -69,7 +69,11 @@ def _agent_ready(
 def eligible(db: Session, workspace_id: uuid.UUID, mcp_catalog_json: str = "[]") -> dict:
     agents = db.scalars(
         select(AgentVersion)
-        .where(AgentVersion.workspace_id == workspace_id, AgentVersion.purpose == "published")
+        .where(
+            AgentVersion.workspace_id == workspace_id,
+            AgentVersion.purpose == "published",
+            standalone_versions(),
+        )
         .order_by(AgentVersion.created_at.desc())
         .limit(100)
     ).all()
@@ -121,6 +125,7 @@ def create(
                 AgentVersion.workspace_id == workspace_id,
                 AgentVersion.id == version_id,
                 AgentVersion.purpose == "published",
+                standalone_versions(),
             )
         )
         connection = (

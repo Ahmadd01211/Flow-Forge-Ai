@@ -5,11 +5,13 @@ bound through deployments, so trigger secrets never enter a workflow graph.
 """
 
 import re
+from typing import get_args
 
 from fastapi import HTTPException
 from jsonschema import Draft202012Validator
 
 from app.core.json_contracts import UNSAFE_NAMES, bounded_json, validate_user_schema
+from app.modules.agents.schemas import AgentConfig
 from app.modules.tools.catalog import CATALOG
 
 OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "exists"]
@@ -73,6 +75,7 @@ SCHEMAS: dict[str, dict] = {
     "manual_input": NO_CONFIG,
     "webhook_trigger": NO_CONFIG,
     "schedule_trigger": NO_CONFIG,
+    "chat_trigger": NO_CONFIG,
     "merge": {"type": "object", "properties": {"mode": {"enum": ["all", "active"], "x-message": "Choose all paths or only active paths."}}, "required": ["mode"]},
     "agent": {
         "type": "object",
@@ -84,6 +87,62 @@ SCHEMAS: dict[str, dict] = {
             }
         },
         "required": ["version_id"],
+    },
+    # Shapes only; provider, model and tool readiness come from the agent checklist in llm.issues.
+    "llm": {
+        "type": "object",
+        "properties": {
+            "instructions": {"type": "string", "minLength": 1, "maxLength": 32000, "x-message": "Tell the model what to do, in up to 32,000 characters."},
+            "provider": {"enum": list(get_args(AgentConfig.model_fields["provider"].annotation)), "x-message": "Choose a model provider."},
+            "model_id": {"type": "string", "minLength": 1, "maxLength": 200, "x-message": "Choose a verified model."},
+            "tool_keys": {"type": "array", "maxItems": 8, "uniqueItems": True, "items": {"enum": sorted(CATALOG)}, "x-message": "Choose each reviewed tool once."},
+            "mcp_tools": {
+                "type": "array", "maxItems": 8,
+                "items": {"type": "object", "properties": {"server_id": {"type": "string"}, "tool_name": {"type": "string"}}, "required": ["server_id", "tool_name"]},
+                "x-message": "Choose up to eight MCP tools.",
+            },
+            "http_tools": {
+                "type": "array", "maxItems": 8,
+                "items": {"type": "object", "properties": {"tool_id": {"type": "string"}}, "required": ["tool_id"]},
+                "x-message": "Choose up to eight HTTP tools.",
+            },
+            "output_schema": {"type": "object", "x-message": "Describe the output with a JSON Schema object."},
+            "limits": {
+                "type": "object",
+                "properties": {
+                    "max_cost_usd": {"type": "string", "pattern": r"^(0|[1-9][0-9]{0,3})(\.[0-9]{1,8})?$", "x-message": "Enter a dollar amount such as 0.10."},
+                    "max_tool_calls": {"type": "integer", "minimum": 0, "maximum": 32, "x-message": "Allow 0–32 tool calls."},
+                    "max_iterations": {"type": "integer", "minimum": 1, "maximum": 20, "x-message": "Allow 1–20 model turns."},
+                    "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 300, "x-message": "Use 1–300 seconds."},
+                    "max_output_tokens": {"type": "integer", "minimum": 16, "maximum": 4096, "x-message": "Use 16–4,096 output tokens."},
+                },
+                "additionalProperties": False,
+                "x-message": "Check the run limits.",
+            },
+            "memory": {
+                "type": ["object", "null"],
+                "properties": {
+                    "key_pointer": {**_pointer("Use a field path such as /conversation_id."), "minLength": 2},
+                    "max_turns": {"type": "integer", "minimum": 1, "maximum": 20, "x-message": "Remember 1–20 exchanges."},
+                    "retention_days": {"type": "integer", "minimum": 1, "maximum": 90, "x-message": "Keep memory for 1–90 days."},
+                },
+                "additionalProperties": False,
+                "x-message": "Check the memory settings.",
+            },
+            "skills": {
+                "type": "array", "maxItems": 8,
+                "items": {"type": "object", "properties": {"skill_id": {"type": "string"}}, "required": ["skill_id"]},
+                "x-message": "Attach up to eight skills.",
+            },
+            "workflow_tools": {
+                "type": "array", "maxItems": 4,
+                "items": {"type": "object", "properties": {"version_id": {"type": "string"}}, "required": ["version_id"]},
+                "x-message": "Offer up to four published workflows as tools.",
+            },
+            # Pinned when the workflow is published.
+            "version_id": {"type": "string", "x-message": "Republish to refresh this LLM step."},
+        },
+        "required": ["instructions", "provider", "model_id"],
     },
     "tool": {
         "type": "object",
@@ -213,7 +272,7 @@ def config_issues(
         error("policy.timeout_seconds", "Step timeout must be a whole number from 1 to 300 seconds.")
     if type(attempts) is not int or not 1 <= attempts <= 3:
         error("policy.max_attempts", "Use one to three attempts for local steps.")
-    elif node.type in {"agent", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait"} and attempts != 1:
+    elif node.type in {"agent", "llm", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait"} and attempts != 1:
         error("policy.max_attempts", "External steps require one attempt. Start an explicit new run to replay them.")
     config = node.config
     try:

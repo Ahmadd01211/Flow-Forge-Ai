@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.credentials import decrypt_secret, encrypt_secret
 from app.core.errors import fail
 from app.core.json_contracts import bounded_json, example_errors
+from app.modules.agents.memory import MAX_HISTORY_BYTES
 from app.modules.agents.models import AgentVersion
 from app.modules.audit.service import record
 from app.modules.executions.models import AgentRun
@@ -157,6 +158,8 @@ def submit(
     estimated_input_bytes = (
         len((config["instructions"] + input_text + canonical(config["output_schema"]) + canonical(config.get("mcp_tools", [])) + canonical(config.get("http_tools", []))).encode())
         + 4096
+        # Remembered turns are added to the model input at run time.
+        + (MAX_HISTORY_BYTES if config.get("memory") else 0)
     )
     if estimated_input_bytes > MAX_INPUT_BYTES:
         fail(
@@ -174,7 +177,8 @@ def submit(
             "The run budget cannot cover the input and minimum output allowance.",
         )
     # Multi-turn tool runs may consume the whole configured budget across calls.
-    reserved = budget if config.get("tool_keys") or config.get("mcp_tools") or config.get("http_tools") else input_reserve + output_price * max_output
+    from app.modules.executions.runtime import uses_tools
+    reserved = budget if uses_tools(config) else input_reserve + output_price * max_output
     reserved = reserved.quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
     from app.modules.workspaces.usage import admit
     admit(db, workspace_id, reserved)

@@ -42,7 +42,7 @@ def assess(db, workspace_id, config, connection, raw_catalog="[]"):
             "model",
             True,
         )
-    if config["tool_keys"] or config.get("mcp_tools") or config.get("http_tools"):
+    if config["tool_keys"] or config.get("mcp_tools") or config.get("http_tools") or config.get("workflow_tools"):
         if config["limits"]["max_tool_calls"] < 1:
             issue(
                 "TOOL_CALL_LIMIT", "Allow at least one tool call when tools are selected.", "limits"
@@ -78,6 +78,18 @@ def assess(db, workspace_id, config, connection, raw_catalog="[]"):
             pin_http(db, workspace_id, config["http_tools"])
         except HTTPException as exc:
             issue(exc.detail["code"], exc.detail["message"], "model")
+    if config.get("workflow_tools"):
+        from app.modules.workflows.tools import pin as pin_workflows
+        try:
+            pin_workflows(db, workspace_id, config["workflow_tools"], raw_catalog)
+        except HTTPException as exc:
+            issue(exc.detail["code"], exc.detail["message"], "model")
+    if config.get("skills"):
+        from app.modules.skills.service import check_attached
+        for message in check_attached(db, workspace_id, config):
+            issue("SKILL_UNAVAILABLE", message, "skills")
+        if profile.local_tools and config["limits"]["max_tool_calls"] < 1:
+            issue("TOOL_CALL_LIMIT", "Allow at least one tool call so the agent can load its skills.", "limits")
     if Decimal(config["limits"]["max_cost_usd"]) <= 0:
         issue("BUDGET_TOO_SMALL", "Set a run budget above zero.", "limits")
     if config["provider"] in {"openai", "openrouter"}:

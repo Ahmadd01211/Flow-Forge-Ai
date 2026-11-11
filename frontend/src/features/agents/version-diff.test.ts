@@ -9,6 +9,10 @@ const config: AgentConfig = {
   tool_keys: [],
   mcp_tools: [],
   http_tools: [],
+  memory: null,
+  workflow_tools: [],
+  skills: [],
+  skill_loading: "on_demand",
   input_schema: { type: "object", properties: { ticket: { type: "string" } } },
   output_schema: { type: "object" },
   limits: {

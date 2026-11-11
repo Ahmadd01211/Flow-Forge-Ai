@@ -6,7 +6,7 @@ export function requiresPublishedRun(
 ): boolean {
   return nodes.some(
     (node) =>
-      ["agent", "mcp_tool", "http_tool", "approval", "wait"].includes(
+      ["agent", "llm", "mcp_tool", "http_tool", "approval", "wait"].includes(
         node.type,
       ) ||
       (["subworkflow", "for_each"].includes(node.type) &&
@@ -197,6 +197,11 @@ export function configSummary(
       return typeof config.tool_key === "string"
         ? (toolNames[config.tool_key] ?? config.tool_key)
         : null;
+    case "llm": {
+      if (!config.model_id) return null;
+      const tools = ["tool_keys", "mcp_tools", "http_tools"].reduce((sum, key) => sum + ((config[key] as unknown[]) ?? []).length, 0);
+      return `${config.model_id}${tools ? ` · ${tools} tool${tools === 1 ? "" : "s"}` : ""}`;
+    }
     case "mcp_tool":
       return config.tool_name
         ? `${config.server_id} · ${config.tool_name}`
@@ -226,4 +231,11 @@ export function configSummary(
     default:
       return null;
   }
+}
+
+/** Text of a run's output: a `reply` field when present, otherwise the JSON itself. */
+export function replyText(output: unknown): string {
+  if (typeof output === "string") return output;
+  const reply = (output as { reply?: unknown } | null)?.reply;
+  return typeof reply === "string" ? reply : JSON.stringify(output, null, 2);
 }

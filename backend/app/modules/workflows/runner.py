@@ -16,6 +16,7 @@ from app.modules.workflows.composition import (
 )
 from app.modules.workflows.models import WorkflowRun
 from app.modules.workflows.preview import run_preview
+from app.modules.workflows.tools import MAX_WORKFLOW_TOOL_CALLS, inspect
 
 
 class DurableRunner:
@@ -47,7 +48,7 @@ class DurableRunner:
         entry_id = next(
             node.id
             for node in graph.nodes
-            if node.type in {"manual_input", "webhook_trigger", "schedule_trigger"}
+            if node.type in {"manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"}
         )
         ceiling, deadline = checkpoint.bind_scope(ceiling, deadline, entry_id)
         restored = checkpoint.completed()
@@ -142,6 +143,30 @@ class DurableRunner:
                 {"items": outputs, "count": len(outputs)} if node.type == "for_each" else outputs[0]
             )
 
+        def tool_workflows(node):
+            calls = iter(range(MAX_WORKFLOW_TOOL_CALLS))
+
+            def call(grant, arguments, remaining):
+                with self.sessions() as db:
+                    run = self.active_run(db)
+                    version, child, _ = inspect(db, self.workspace_id, grant, self.settings.mcp_catalog_json)
+                    if version.workflow_id in ancestry or len(ancestry) >= MAX_CALL_DEPTH:
+                        fail(422, "SUBWORKFLOW_RECURSION", "This workflow call exceeds the supported nesting rules.")
+                    if not isinstance(arguments, dict) or example_errors(child.input_schema, arguments, "input"):
+                        fail(422, "SUBWORKFLOW_INPUT_INVALID", "Tool arguments must match the workflow's input contract.")
+                    child_ceiling = min(ceiling, (run.cost_usd or Decimal(0)) + Decimal(child.limits["max_cost_usd"]))
+                index = next(calls, None)
+                if index is None:
+                    fail(422, "WORKFLOW_TOOL_CALL_LIMIT", "This step started its maximum number of workflows.")
+                child_deadline = min(
+                    deadline,
+                    datetime.now(UTC) + timedelta(seconds=min(remaining, child.limits.get("timeout_seconds", 60))),
+                )
+                evidence = checkpoint.child(node, version.id, index, hold_inflight=True)
+                return self.run(child, arguments, evidence, child_deadline, child_ceiling, (*ancestry, version.workflow_id))["output"]
+
+            return call
+
         with self.sessions() as db:
             from app.modules.workflows.pauses import handler as pause_handler
             return run_preview(
@@ -158,9 +183,10 @@ class DurableRunner:
                         self.master,
                         capped_graph,
                         self.settings,
+                        workflow_runner=tool_workflows,
                     )
                 )
-                if any(node.type == "agent" for node in graph.nodes)
+                if any(node.type in {"agent", "llm"} for node in graph.nodes)
                 else None,
                 mcp_handler=bounded(
                     _mcp_handler(

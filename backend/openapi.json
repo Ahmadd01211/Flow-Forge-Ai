@@ -105,6 +105,16 @@
             "title": "Mcp Tools",
             "type": "array"
           },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Memory-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "model_id": {
             "default": "",
             "maxLength": 200,
@@ -135,16 +145,42 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "skill_loading": {
+            "default": "on_demand",
+            "enum": [
+              "on_demand",
+              "inline"
+            ],
+            "title": "Skill Loading",
+            "type": "string"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillGrant"
+            },
+            "maxItems": 8,
+            "title": "Skills",
+            "type": "array"
+          },
           "tool_keys": {
             "items": {
               "enum": [
                 "json.extract",
-                "text.replace"
+                "text.replace",
+                "demo.order_lookup"
               ],
               "type": "string"
             },
             "maxItems": 8,
             "title": "Tool Keys",
+            "type": "array"
+          },
+          "workflow_tools": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowGrant"
+            },
+            "maxItems": 4,
+            "title": "Workflow Tools",
             "type": "array"
           }
         },
@@ -184,6 +220,16 @@
             "title": "Mcp Tools",
             "type": "array"
           },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Memory-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "model_id": {
             "default": "",
             "maxLength": 200,
@@ -214,16 +260,42 @@
             "title": "Schema Version",
             "type": "integer"
           },
+          "skill_loading": {
+            "default": "on_demand",
+            "enum": [
+              "on_demand",
+              "inline"
+            ],
+            "title": "Skill Loading",
+            "type": "string"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/SkillGrant"
+            },
+            "maxItems": 8,
+            "title": "Skills",
+            "type": "array"
+          },
           "tool_keys": {
             "items": {
               "enum": [
                 "json.extract",
-                "text.replace"
+                "text.replace",
+                "demo.order_lookup"
               ],
               "type": "string"
             },
             "maxItems": 8,
             "title": "Tool Keys",
+            "type": "array"
+          },
+          "workflow_tools": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowGrant"
+            },
+            "maxItems": 4,
+            "title": "Workflow Tools",
             "type": "array"
           }
         },
@@ -237,7 +309,11 @@
           "output_schema",
           "limits",
           "mcp_tools",
-          "http_tools"
+          "http_tools",
+          "memory",
+          "workflow_tools",
+          "skills",
+          "skill_loading"
         ],
         "title": "AgentConfig",
         "type": "object"
@@ -787,6 +863,36 @@
         "title": "CaseResult",
         "type": "object"
       },
+      "ChatMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^\\S+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatMessage",
+        "type": "object"
+      },
       "ConnectionList": {
         "properties": {
           "items": {
@@ -1165,6 +1271,33 @@
         "title": "EvaluationResult",
         "type": "object"
       },
+      "ExampleCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_output": {
+            "additionalProperties": true,
+            "title": "Expected Output",
+            "type": "object"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input",
+          "expected_output"
+        ],
+        "title": "ExampleCreate",
+        "type": "object"
+      },
       "ExampleError": {
         "properties": {
           "code": {
@@ -1258,6 +1391,30 @@
           "errors"
         ],
         "title": "ExampleResult",
+        "type": "object"
+      },
+      "FeedbackWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Comment",
+            "type": "string"
+          },
+          "rating": {
+            "enum": [
+              "up",
+              "down"
+            ],
+            "title": "Rating",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "title": "FeedbackWrite",
         "type": "object"
       },
       "Graph": {
@@ -1949,6 +2106,69 @@
         "title": "McpToolPolicy",
         "type": "object"
       },
+      "Memory-Input": {
+        "additionalProperties": false,
+        "description": "Remember earlier turns of a conversation identified by a field in each run's input.",
+        "properties": {
+          "key_pointer": {
+            "default": "/conversation_id",
+            "maxLength": 200,
+            "pattern": "^(/[^/]*)+$",
+            "title": "Key Pointer",
+            "type": "string"
+          },
+          "max_turns": {
+            "default": 10,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "type": "integer"
+          },
+          "retention_days": {
+            "default": 30,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "title": "Memory",
+        "type": "object"
+      },
+      "Memory-Output": {
+        "additionalProperties": false,
+        "description": "Remember earlier turns of a conversation identified by a field in each run's input.",
+        "properties": {
+          "key_pointer": {
+            "default": "/conversation_id",
+            "maxLength": 200,
+            "pattern": "^(/[^/]*)+$",
+            "title": "Key Pointer",
+            "type": "string"
+          },
+          "max_turns": {
+            "default": 10,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Max Turns",
+            "type": "integer"
+          },
+          "retention_days": {
+            "default": 30,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key_pointer",
+          "max_turns",
+          "retention_days"
+        ],
+        "title": "Memory",
+        "type": "object"
+      },
       "ModelCapability": {
         "properties": {
           "input_usd_per_million": {
@@ -2049,7 +2269,9 @@
               "manual_input",
               "webhook_trigger",
               "schedule_trigger",
+              "chat_trigger",
               "agent",
+              "llm",
               "tool",
               "mcp_tool",
               "http_tool",
@@ -2207,7 +2429,8 @@
               "instructions",
               "model",
               "schemas",
-              "limits"
+              "limits",
+              "skills"
             ],
             "title": "Section",
             "type": "string"
@@ -2700,6 +2923,209 @@
         "title": "SharingUpdate",
         "type": "object"
       },
+      "SkillConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/SkillExample"
+            },
+            "maxItems": 5,
+            "title": "Examples",
+            "type": "array"
+          },
+          "http_tools": {
+            "items": {
+              "$ref": "#/components/schemas/HttpGrant"
+            },
+            "maxItems": 8,
+            "title": "Http Tools",
+            "type": "array"
+          },
+          "instructions": {
+            "default": "",
+            "maxLength": 8000,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "mcp_tools": {
+            "items": {
+              "$ref": "#/components/schemas/McpGrant"
+            },
+            "maxItems": 8,
+            "title": "Mcp Tools",
+            "type": "array"
+          },
+          "tool_keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Tool Keys",
+            "type": "array"
+          }
+        },
+        "title": "SkillConfig",
+        "type": "object"
+      },
+      "SkillExample": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "maxLength": 2000,
+            "title": "Input",
+            "type": "string"
+          },
+          "output": {
+            "maxLength": 2000,
+            "title": "Output",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input",
+          "output"
+        ],
+        "title": "SkillExample",
+        "type": "object"
+      },
+      "SkillGrant": {
+        "additionalProperties": false,
+        "description": "A skill attached to an agent. Drafts name the skill; publishing pins its version and text.",
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Description",
+            "type": "string"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/SkillExample"
+            },
+            "maxItems": 5,
+            "title": "Examples",
+            "type": "array"
+          },
+          "instructions": {
+            "default": "",
+            "maxLength": 8000,
+            "title": "Instructions",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "skill_id": {
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "Skill Id",
+            "type": "string"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "required": [
+          "skill_id"
+        ],
+        "title": "SkillGrant",
+        "type": "object"
+      },
+      "SkillPublish": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "SkillPublish",
+        "type": "object"
+      },
+      "SkillUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/SkillConfig"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "expected_revision"
+        ],
+        "title": "SkillUpdate",
+        "type": "object"
+      },
+      "SkillWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/SkillConfig"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SkillWrite",
+        "type": "object"
+      },
       "SnapshotCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2977,6 +3403,25 @@
           "output"
         ],
         "title": "ToolResult",
+        "type": "object"
+      },
+      "TryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/AgentConfig-Input"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          }
+        },
+        "required": [
+          "config",
+          "input"
+        ],
+        "title": "TryRequest",
         "type": "object"
       },
       "UsageLimits": {
@@ -3399,6 +3844,62 @@
         "title": "WorkflowCreate",
         "type": "object"
       },
+      "WorkflowGrant": {
+        "additionalProperties": false,
+        "description": "A published workflow the model may start as a tool; publishing pins its contract.",
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "graph_hash": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Hash"
+          },
+          "has_external": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has External"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          },
+          "version_id": {
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id"
+        ],
+        "title": "WorkflowGrant",
+        "type": "object"
+      },
       "WorkflowPauseRead": {
         "properties": {
           "allow_requester": {
@@ -3617,6 +4118,19 @@
           },
           "reserved_max_usd": {
             "title": "Reserved Max Usd",
+            "type": "string"
+          },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "chat",
+              "webhook",
+              "schedule",
+              "deployment",
+              "replay"
+            ],
+            "title": "Source",
             "type": "string"
           },
           "started_at": {
@@ -5164,6 +5678,52 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/agents/library": {
+      "get": {
+        "description": "Every user-built agent with what it can do, whether it is published and how it has run.",
+        "operationId": "library_api_v1_workspaces__workspace_id__agents_library_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Library Api V1 Workspaces  Workspace Id  Agents Library Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Library",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/agents/workflow-options": {
       "get": {
         "operationId": "workflow_options_api_v1_workspaces__workspace_id__agents_workflow_options_get",
@@ -5378,6 +5938,136 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/chat": {
+      "post": {
+        "description": "Send one message to the agent's latest published version.",
+        "operationId": "chat_api_v1_workspaces__workspace_id__agents__agent_id__chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Chat Api V1 Workspaces  Workspace Id  Agents  Agent Id  Chat Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/duplicate": {
+      "post": {
+        "operationId": "duplicate_api_v1_workspaces__workspace_id__agents__agent_id__duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Duplicate Api V1 Workspaces  Workspace Id  Agents  Agent Id  Duplicate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/evaluations": {
       "get": {
         "operationId": "listing_api_v1_workspaces__workspace_id__agents__agent_id__evaluations_get",
@@ -5565,6 +6255,296 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/examples": {
+      "post": {
+        "description": "Append a chat exchange to the agent's \"Saved from chat\" regression examples.",
+        "operationId": "save_example_api_v1_workspaces__workspace_id__agents__agent_id__examples_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExampleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Example Api V1 Workspaces  Workspace Id  Agents  Agent Id  Examples Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Example",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/memory": {
+      "delete": {
+        "description": "Forget one conversation, or every conversation this agent remembers.",
+        "operationId": "forget_api_v1_workspaces__workspace_id__agents__agent_id__memory_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Forget Api V1 Workspaces  Workspace Id  Agents  Agent Id  Memory Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forget",
+        "tags": [
+          "agent-workbench"
+        ]
+      },
+      "get": {
+        "description": "How many conversations are remembered, and the stored turns of one conversation by its ID.",
+        "operationId": "memory_api_v1_workspaces__workspace_id__agents__agent_id__memory_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Memory Api V1 Workspaces  Workspace Id  Agents  Agent Id  Memory Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Memory",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/performance": {
+      "get": {
+        "description": "How the agent's runs went over the last `days`: volume, success, speed, cost, tools, errors, feedback.",
+        "operationId": "performance_api_v1_workspaces__workspace_id__agents__agent_id__performance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_tests",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Tests",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Performance Api V1 Workspaces  Workspace Id  Agents  Agent Id  Performance Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Performance",
+        "tags": [
+          "agent-workbench"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/readiness": {
       "get": {
         "operationId": "readiness_api_v1_workspaces__workspace_id__agents__agent_id__readiness_get",
@@ -5741,6 +6721,81 @@
         "summary": "Snapshot",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/{agent_id}/try": {
+      "post": {
+        "description": "Run the editor's current, possibly unsaved, settings once as a normal budgeted agent run.",
+        "operationId": "try_draft_api_v1_workspaces__workspace_id__agents__agent_id__try_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Try Draft Api V1 Workspaces  Workspace Id  Agents  Agent Id  Try Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Try Draft",
+        "tags": [
+          "agent-workbench"
         ]
       }
     },
@@ -8374,6 +9429,670 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/runs/{run_id}/feedback": {
+      "delete": {
+        "operationId": "remove_feedback_api_v1_workspaces__workspace_id__runs__run_id__feedback_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Feedback Api V1 Workspaces  Workspace Id  Runs  Run Id  Feedback Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Feedback",
+        "tags": [
+          "executions"
+        ]
+      },
+      "put": {
+        "operationId": "give_feedback_api_v1_workspaces__workspace_id__runs__run_id__feedback_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Give Feedback Api V1 Workspaces  Workspace Id  Runs  Run Id  Feedback Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give Feedback",
+        "tags": [
+          "executions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/runs/{run_id}/trace": {
+      "get": {
+        "description": "The run as a timeline: model calls, skill loads and tool calls with their payloads.",
+        "operationId": "run_trace_api_v1_workspaces__workspace_id__runs__run_id__trace_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Trace Api V1 Workspaces  Workspace Id  Runs  Run Id  Trace Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Trace",
+        "tags": [
+          "executions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills": {
+      "get": {
+        "operationId": "listing_api_v1_workspaces__workspace_id__skills_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Listing Api V1 Workspaces  Workspace Id  Skills Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing",
+        "tags": [
+          "skills"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_workspaces__workspace_id__skills_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Api V1 Workspaces  Workspace Id  Skills Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/starters": {
+      "get": {
+        "operationId": "starters_api_v1_workspaces__workspace_id__skills_starters_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Starters Api V1 Workspaces  Workspace Id  Skills Starters Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Starters",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/starters/{key}": {
+      "post": {
+        "operationId": "add_starter_api_v1_workspaces__workspace_id__skills_starters__key__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Add Starter Api V1 Workspaces  Workspace Id  Skills Starters  Key  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Starter",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/{skill_id}": {
+      "get": {
+        "operationId": "detail_api_v1_workspaces__workspace_id__skills__skill_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Detail Api V1 Workspaces  Workspace Id  Skills  Skill Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "skills"
+        ]
+      },
+      "patch": {
+        "operationId": "update_api_v1_workspaces__workspace_id__skills__skill_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Api V1 Workspaces  Workspace Id  Skills  Skill Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/{skill_id}/archive": {
+      "post": {
+        "operationId": "archive_api_v1_workspaces__workspace_id__skills__skill_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Archive Api V1 Workspaces  Workspace Id  Skills  Skill Id  Archive Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/{skill_id}/publish": {
+      "post": {
+        "operationId": "publish_api_v1_workspaces__workspace_id__skills__skill_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillPublish"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Publish Api V1 Workspaces  Workspace Id  Skills  Skill Id  Publish Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/skills/{skill_id}/versions": {
+      "get": {
+        "operationId": "versions_api_v1_workspaces__workspace_id__skills__skill_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "skill_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Skill Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Versions Api V1 Workspaces  Workspace Id  Skills  Skill Id  Versions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Versions",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/templates": {
       "post": {
         "operationId": "create_template_api_v1_workspaces__workspace_id__templates_post",
@@ -9523,6 +11242,81 @@
           }
         },
         "summary": "Update",
+        "tags": [
+          "workflows"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/workflows/{workflow_id}/chat": {
+      "post": {
+        "description": "Start a run of the latest published version with one chat message.",
+        "operationId": "send_chat_message_api_v1_workspaces__workspace_id__workflows__workflow_id__chat_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Send Chat Message Api V1 Workspaces  Workspace Id  Workflows  Workflow Id  Chat Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Chat Message",
         "tags": [
           "workflows"
         ]

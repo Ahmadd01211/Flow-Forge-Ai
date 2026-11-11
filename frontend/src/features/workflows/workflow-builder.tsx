@@ -31,6 +31,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Bot,
+  MessageSquare,
+  Sparkles,
   Braces,
   Check,
   ChevronDown,
@@ -77,6 +79,7 @@ import { NodeConfigForm, type FormContext } from "./node-config-forms";
 import { NodeTestPanel, type NodeTestState } from "./node-test-panel";
 import { DataMappings } from "./data-mappings";
 import type {
+  Connection as ProviderConnection,
   Graph,
   GraphNode,
   NodeKind,
@@ -129,10 +132,28 @@ const kinds: {
     enabled: true,
   },
   {
+    type: "chat_trigger",
+    name: "Chat trigger",
+    description: "Start from a chat message and keep the conversation going",
+    icon: MessageSquare,
+    tone: "teal",
+    group: "TRIGGERS",
+    enabled: true,
+  },
+  {
     type: "agent",
     name: "AI agent",
     description: "Run a published agent with approved tools",
     icon: Bot,
+    tone: "purple",
+    group: "INTELLIGENCE",
+    enabled: true,
+  },
+  {
+    type: "llm",
+    name: "LLM",
+    description: "Prompt a model here, with tools and APIs",
+    icon: Sparkles,
     tone: "purple",
     group: "INTELLIGENCE",
     enabled: true,
@@ -316,7 +337,9 @@ const FlowNode = memo(function FlowNode({
                             ? "Receive an HTTP event"
                             : d.type === "schedule_trigger"
                               ? "Run on a schedule"
-                              : "Provide workflow input")}
+                              : d.type === "chat_trigger"
+                                ? "Receive a chat message"
+                                : "Provide workflow input")}
       </p>
       <div className={`flow-node-footer ${state}`} title={issues[0]?.message}>
         <span className="node-state-dot" />
@@ -331,7 +354,8 @@ const FlowNode = memo(function FlowNode({
       </div>
       {d.type !== "manual_input" &&
         d.type !== "webhook_trigger" &&
-        d.type !== "schedule_trigger" && (
+        d.type !== "schedule_trigger" &&
+        d.type !== "chat_trigger" && (
           <Handle type="target" position={Position.Left} id="in" />
         )}
       {d.type !== "result" &&
@@ -386,6 +410,8 @@ export function WorkflowBuilder({
   httpOptions,
   workflowOptions: initialWorkflowOptions,
   toolOptions,
+  connections,
+  skillOptions = [],
   initialPublishedVersion,
 }: {
   workflow: Workflow;
@@ -394,8 +420,11 @@ export function WorkflowBuilder({
   httpOptions: FormContext["httpOptions"];
   workflowOptions: FormContext["workflowOptions"];
   toolOptions: ToolOption[];
+  connections: ProviderConnection[];
+  skillOptions?: FormContext["skillOptions"];
   initialPublishedVersion: string | null;
 }) {
+  const preferredConnection = connections.find((item) => item.state === "active" && item.default_model_id);
   const [workflowOptions, setWorkflowOptions] = useState(
     initialWorkflowOptions,
   );
@@ -410,7 +439,7 @@ export function WorkflowBuilder({
     [revision, setRevision] = useState(workflow.revision),
     [selected, setSelected] = useState<string | null>(
       workflow.graph.nodes.find((node) =>
-        ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+        ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
           node.type,
         ),
       )?.id || null,
@@ -424,7 +453,7 @@ export function WorkflowBuilder({
     [configText, setConfigText] = useState(
       JSON.stringify(
         workflow.graph.nodes.find((node) =>
-          ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+          ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
             node.type,
           ),
         )?.config || {},
@@ -543,7 +572,9 @@ export function WorkflowBuilder({
       (option) => option.id === activeConfig.version_id,
     ),
     externalTarget =
-      active?.data.definition.type === "agent"
+      active?.data.definition.type === "llm"
+        ? `${String(activeConfig.provider)}/${String(activeConfig.model_id || "a model")}`
+        : active?.data.definition.type === "agent"
         ? activeAgent
           ? `the agent “${activeAgent.name}” v${activeAgent.number} on ${activeAgent.provider}/${activeAgent.model_id}`
           : "a published agent"
@@ -562,6 +593,7 @@ export function WorkflowBuilder({
       )?.message ?? null;
   const formContext: FormContext = {
     workspaceId: workflow.workspace_id,
+    workflowId: workflow.id,
     nodes: graph.nodes,
     upstream: active ? upstreamIds(graph.edges, active.id) : [],
     inputHints: inputFieldHints(graph.input_schema),
@@ -572,6 +604,8 @@ export function WorkflowBuilder({
     refreshWorkflows,
     loadingWorkflows,
     toolOptions,
+    connections,
+    skillOptions,
   };
   async function refreshWorkflows() {
     setLoadingWorkflows(true);
@@ -609,9 +643,9 @@ export function WorkflowBuilder({
     if (type === "result" && nodes.some((n) => n.data.definition.type === type))
       return;
     if (
-      ["manual_input", "webhook_trigger", "schedule_trigger"].includes(type) &&
+      ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(type) &&
       nodes.some((n) =>
-        ["manual_input", "webhook_trigger", "schedule_trigger"].includes(
+        ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
           n.data.definition.type,
         ),
       )
@@ -670,6 +704,15 @@ export function WorkflowBuilder({
               }
             : type === "agent"
               ? { version_id: "" }
+              : type === "llm"
+                ? {
+                    instructions: "",
+                    provider: preferredConnection?.provider ?? "openai",
+                    model_id: preferredConnection?.default_model_id ?? "",
+                    tool_keys: [],
+                    mcp_tools: [],
+                    http_tools: [],
+                  }
               : type === "subworkflow"
                 ? { version_id: "" }
                 : type === "for_each"
@@ -1072,6 +1115,14 @@ export function WorkflowBuilder({
           </div>
         </div>
         <div className="builder-actions">
+          {nodes.some((node) => node.data.definition.type === "chat_trigger") && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/w/${workflow.workspace_id}/workflows/${workflow.id}/chat`} title="Chat with the latest published version">
+                <MessageSquare size={14} />
+                Chat
+              </Link>
+            </Button>
+          )}
           <SaveTemplate
             workspaceId={workflow.workspace_id}
             sourceId={workflow.id}

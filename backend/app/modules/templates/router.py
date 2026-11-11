@@ -270,6 +270,12 @@ def portable_definition(kind: str, payload: dict) -> dict:
             # Clear their entire configuration, including cached connection metadata.
             if node["type"] == "for_each":
                 node["config"] = {key: value for key, value in node["config"].items() if key in {"source", "max_items", "input_mode"}}
+            elif node["type"] == "llm":
+                # Keep the prompt and contract; the model and tool grants are chosen per workspace.
+                node["config"] = {
+                    **{key: value for key, value in node["config"].items() if key in {"instructions", "provider", "output_schema", "limits", "tool_keys"}},
+                    "model_id": "",
+                }
             elif node["type"] in ("agent", "mcp_tool", "http_tool", "subworkflow", "webhook_trigger", "schedule_trigger"):
                 node["config"] = {}
         definition = {"graph": graph}

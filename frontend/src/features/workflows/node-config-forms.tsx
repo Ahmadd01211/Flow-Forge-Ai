@@ -3,7 +3,9 @@ import { useId, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertCircle, Info, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { GraphNode, ToolOption } from "@/lib/api/types";
+import type { AgentConfig, Connection, GraphNode, ToolOption } from "@/lib/api/types";
+import { ModelAndTools, type McpServerOption } from "@/features/agents/model-tools";
+import type { SkillItem } from "@/features/agents/skills-model";
 import type { HttpTool } from "@/features/tools/http-tool-registry";
 import type { components } from "@/lib/api/generated";
 import {
@@ -21,6 +23,7 @@ export type FormContext = {
   refreshWorkflows: () => void;
   loadingWorkflows: boolean;
   workspaceId: string;
+  workflowId: string;
   nodes: GraphNode[];
   upstream: string[];
   inputHints: string[];
@@ -32,13 +35,10 @@ export type FormContext = {
     model_id: string;
     tool_keys: string[];
   }[];
-  mcpOptions: {
-    id: string;
-    name: string;
-    runnable_tools: string[];
-    runnable_schemas: Record<string, unknown>;
-  }[];
+  mcpOptions: McpServerOption[];
   toolOptions: ToolOption[];
+  connections: Connection[];
+  skillOptions: SkillItem[];
   httpOptions: HttpTool[];
 };
 type FormProps = {
@@ -889,6 +889,161 @@ function ResultForm({ node, issues, onChange, context }: FormProps) {
   );
 }
 
+const REPLY_SCHEMA = {
+  type: "object",
+  properties: { reply: { type: "string" } },
+  required: ["reply"],
+  additionalProperties: false,
+};
+
+function LlmForm({ node, issues, onChange, context }: FormProps) {
+  const config = node.config;
+  const limits = (config.limits as Record<string, unknown> | undefined) ?? {};
+  const structured = config.output_schema !== undefined;
+  const memory = config.memory as { key_pointer: string; max_turns: number; retention_days: number } | null | undefined;
+  const skills = (config.skills as { skill_id: string; name: string; description: string }[] | undefined) ?? [];
+  const workflowTools = (config.workflow_tools as { version_id: string; name: string; description: string }[] | undefined) ?? [];
+  // Tool workflows cannot call models or pause, and a workflow cannot offer itself.
+  const toolWorkflows = context.workflowOptions.filter((option) => !option.agent_steps && !option.has_pause);
+  const setLimit = (key: string, value: unknown) => onChange({ ...config, limits: { ...limits, [key]: value } });
+  return (
+    <>
+      <label>
+        Instructions
+        <textarea
+          rows={6}
+          maxLength={32000}
+          value={typeof config.instructions === "string" ? config.instructions : ""}
+          placeholder="You answer customer questions using the order data you receive. Look up shipping status with the tool when asked."
+          onChange={(event) => onChange({ ...config, instructions: event.target.value })}
+        />
+        <FieldIssues issues={issues} path="config.instructions" />
+      </label>
+      <Hint>The model receives the data arriving at this step as JSON. Instructions guide behaviour; tool grants decide what it can reach.</Hint>
+      <div className="llm-model-tools">
+        <ModelAndTools
+          workspaceId={context.workspaceId}
+          config={{
+            provider: (config.provider as AgentConfig["provider"]) ?? "openai",
+            model_id: typeof config.model_id === "string" ? config.model_id : "",
+            tool_keys: (config.tool_keys as AgentConfig["tool_keys"]) ?? [],
+            mcp_tools: (config.mcp_tools as AgentConfig["mcp_tools"]) ?? [],
+            http_tools: (config.http_tools as AgentConfig["http_tools"]) ?? [],
+          }}
+          setConfig={(next) => onChange({ ...config, ...next })}
+          connections={context.connections}
+          tools={context.toolOptions}
+          mcpServers={context.mcpOptions}
+          httpTools={context.httpOptions}
+        />
+        <FieldIssues issues={issues} path="config.model_id" />
+      </div>
+      <fieldset className="reference-field">
+        <legend>Output</legend>
+        <div className="segmented" role="radiogroup" aria-label="Output shape">
+          <button type="button" role="radio" aria-checked={!structured} className={!structured ? "active" : ""} onClick={() => structured && onChange(without(config, "output_schema"))}>
+            Text reply
+          </button>
+          <button type="button" role="radio" aria-checked={structured} className={structured ? "active" : ""} onClick={() => !structured && onChange({ ...config, output_schema: REPLY_SCHEMA })}>
+            Structured JSON
+          </button>
+        </div>
+        {structured ? (
+          <JsonInput label="Output schema" value={config.output_schema} onChange={(output_schema) => onChange({ ...config, output_schema })} rows={8} />
+        ) : (
+          <Hint>Returns <code>{"{ reply }"}</code> with the model&apos;s answer as text.</Hint>
+        )}
+        <FieldIssues issues={issues} path="config.output_schema" />
+      </fieldset>
+      <fieldset className="reference-field">
+        <legend>Skills</legend>
+        {context.skillOptions.length ? context.skillOptions.map((skill) => {
+          const attached = skills.some((grant) => grant.skill_id === skill.id);
+          return (
+            <label className="checkbox-row" key={skill.id}>
+              <input type="checkbox" checked={attached} disabled={!attached && skills.length >= 8} onChange={(event) => onChange({ ...config, skills: event.target.checked ? [...skills, { skill_id: skill.id, name: skill.name, description: skill.description }] : skills.filter((grant) => grant.skill_id !== skill.id) })} />
+              {skill.name}{skill.latest ? ` · v${skill.latest.number}` : " · draft, publish it first"}
+            </label>
+          );
+        }) : <Hint>No skills yet. Add starters in Agents → Skills.</Hint>}
+        <Hint>Publishing the workflow pins each skill's latest version.</Hint>
+        <FieldIssues issues={issues} path="config.skills" />
+      </fieldset>
+      <fieldset className="reference-field">
+        <legend>Memory</legend>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={!!memory}
+            onChange={(event) => onChange(event.target.checked ? { ...config, memory: { key_pointer: "/conversation_id", max_turns: 10, retention_days: 30 } } : without(config, "memory"))}
+          />
+          Remember earlier messages in a conversation
+        </label>
+        {memory && (
+          <>
+            <Field title="Conversation ID field">
+              <PointerInput label="Conversation ID field path" value={memory.key_pointer} placeholder="/conversation_id" hints={context.inputHints} onChange={(key_pointer) => onChange({ ...config, memory: { ...memory, key_pointer } })} />
+            </Field>
+            <label>
+              Exchanges to remember
+              <input type="number" min={1} max={20} value={memory.max_turns} onChange={(event) => onChange({ ...config, memory: { ...memory, max_turns: Number(event.target.value) } })} />
+            </label>
+            <label>
+              Keep for (days)
+              <input type="number" min={1} max={90} value={memory.retention_days} onChange={(event) => onChange({ ...config, memory: { ...memory, retention_days: Number(event.target.value) } })} />
+            </label>
+            <Hint>Earlier turns are sent to the model as <code>history</code> alongside the new <code>input</code>. They are encrypted at rest and deleted after the retention period.</Hint>
+          </>
+        )}
+        <FieldIssues issues={issues} path="config.memory" />
+      </fieldset>
+      <fieldset className="reference-field">
+        <legend>Workflows it can run</legend>
+        {toolWorkflows.length ? (
+          toolWorkflows.map((option) => {
+            const selected = workflowTools.some((grant) => grant.version_id === option.id);
+            return (
+              <label className="checkbox-row" key={option.id}>
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  disabled={!selected && workflowTools.length >= 4}
+                  onChange={(event) =>
+                    onChange({
+                      ...config,
+                      workflow_tools: event.target.checked
+                        ? [...workflowTools, { version_id: option.id, name: option.name, description: "" }]
+                        : workflowTools.filter((grant) => grant.version_id !== option.id),
+                    })
+                  }
+                />
+                {option.name} · v{option.number}{option.has_external ? " · calls external services" : ""}
+              </label>
+            );
+          })
+        ) : (
+          <Hint>Publish a workflow without agent, LLM, approval or timer steps to offer it here.</Hint>
+        )}
+        <Hint>The model can start up to three of these per run. They run inside this workflow run and share its budget and deadline.</Hint>
+        <FieldIssues issues={issues} path="config.workflow_tools" />
+      </fieldset>
+      <fieldset className="reference-field">
+        <legend>Limits</legend>
+        <label>
+          Budget per run (USD)
+          <input value={String(limits.max_cost_usd ?? "0.10")} inputMode="decimal" onChange={(event) => setLimit("max_cost_usd", event.target.value)} />
+        </label>
+        <label>
+          Tool calls per run
+          <input type="number" min={0} max={32} value={Number(limits.max_tool_calls ?? 8)} onChange={(event) => setLimit("max_tool_calls", Number(event.target.value))} />
+        </label>
+        <FieldIssues issues={issues} path="config.limits" />
+      </fieldset>
+      <Hint>Publishing freezes these settings with the workflow version. Each run re-checks the provider key, tool approvals and both this budget and the workflow budget.</Hint>
+    </>
+  );
+}
+
 function AgentForm({ node, issues, onChange, context }: FormProps) {
   return (
     <>
@@ -1062,6 +1217,16 @@ function TriggerInfo({ node, context }: FormProps) {
           Input arrives as a JSON object and is checked against the workflow
           input schema before any step runs. Later steps read it with field
           paths such as <code>/ticket/id</code>.
+        </p>
+      ) : node.type === "chat_trigger" ? (
+        <p>
+          Each chat message starts a run with <code>{"{ conversation_id, message }"}</code>.
+          Give an LLM step memory on <code>/conversation_id</code> to continue the conversation.
+          Publish, then open the{" "}
+          <Link href={`/w/${context.workspaceId}/workflows/${context.workflowId}/chat`} className="text-link">
+            chat
+          </Link>
+          , or send the same input from your app through a deployment.
         </p>
       ) : (
         <p>
@@ -1390,7 +1555,9 @@ const forms: Record<GraphNode["type"], (props: FormProps) => ReactNode> = {
   manual_input: TriggerInfo,
   webhook_trigger: TriggerInfo,
   schedule_trigger: TriggerInfo,
+  chat_trigger: TriggerInfo,
   agent: AgentForm,
+  llm: LlmForm,
   tool: ToolForm,
   mcp_tool: McpToolForm,
   http_tool: HttpToolForm,

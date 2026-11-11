@@ -22,6 +22,8 @@ from app.modules.executions.runtime import (
     checked_usage,
     generate,
     generate_openai_with_tools,
+    prepared,
+    uses_tools,
 )
 from app.modules.executions.service import MAX_INPUT_BYTES, MAX_OUTPUT_TOKENS, MODEL_PRICES
 from app.modules.integrations.models import IntegrationConnection, SecretReference
@@ -90,6 +92,10 @@ def publish(
     graph = Graph.model_validate(row.graph)
     _executable(db, workspace_id, graph, mcp_catalog_json, root_workflow_id=row.id)
     for node in graph.nodes:
+        if node.type == "llm":
+            from app.modules.workflows.llm import freeze
+            frozen = freeze(db, workspace_id, row.id, node, actor_id, mcp_catalog_json)
+            node.config = {**node.config, "version_id": str(frozen.id)}
         if node.type in {"subworkflow", "for_each"}:
             from app.modules.workflows.composition import resolve_version
             child, _ = resolve_version(db, workspace_id, {"version_id": node.config["version_id"]})
@@ -165,6 +171,7 @@ def submit(
     mcp_catalog_json: str = "[]",
     automation_id: uuid.UUID | None = None,
     commit: bool = True,
+    source: str = "manual",
 ) -> tuple[WorkflowRun, bool]:
     if not 8 <= len(idempotency_key) <= 128 or any(ch.isspace() for ch in idempotency_key):
         fail(
@@ -215,6 +222,11 @@ def submit(
     from app.modules.workspaces.usage import admit
     reserved = Decimal(graph.limits["max_cost_usd"]) if checked["agent_steps"] else Decimal("0")
     admit(db, workspace_id, reserved)
+    if deployment_id:
+        source = "deployment"
+    elif automation_id:
+        from app.modules.automations.models import WorkflowAutomation
+        source = db.scalar(select(WorkflowAutomation.kind).where(WorkflowAutomation.id == automation_id)) or source
     run_id = uuid.uuid4()
     nonce, ciphertext = encrypt_secret(master, workspace_id, run_id, 1, _canonical(input_data))
     run = WorkflowRun(
@@ -223,6 +235,7 @@ def submit(
         version_id=version_id,
         deployment_id=deployment_id,
         automation_id=automation_id,
+        source=source,
         requested_by=actor_id,
         idempotency_key_hash=key_hash,
         request_hash=request_hash,
@@ -280,6 +293,7 @@ def public_run(run: WorkflowRun, master: bytes, detail: bool = True) -> dict:
         "version_id": run.version_id,
         "automation_id": run.automation_id,
         "deployment_id": run.deployment_id,
+        "source": run.source,
         "state": run.state,
         "requested_by": run.requested_by,
         "pauses": [public_pause(row) for row in db.scalars(select(WorkflowPause).where(WorkflowPause.workspace_id == run.workspace_id, WorkflowPause.run_id == run.id).order_by(WorkflowPause.created_at, WorkflowPause.id)).all()] if detail and db is not None else [],
@@ -321,7 +335,8 @@ def cancel(
     return run
 
 
-def _agent_handler(sessions, identity, token, workspace_id, master, graph, settings):
+def _agent_handler(sessions, identity, token, workspace_id, master, graph, settings, workflow_runner=None):
+    """Run agent and LLM steps; `workflow_runner(node)` returns the step's tool-workflow callback."""
     def active() -> bool:
         with sessions() as db:
             current = db.scalar(select(WorkflowRun).where(WorkflowRun.id == identity))
@@ -369,11 +384,16 @@ def _agent_handler(sessions, identity, token, workspace_id, master, graph, setti
             if model not in MODEL_PRICES:
                 fail(422, "RUNTIME_UNSUPPORTED", "This agent model cannot run in a workflow.")
             from app.providers.profiles import capability
-            if (config.get("tool_keys") or config.get("mcp_tools") or config.get("http_tools")) and not capability(*model).local_tools:
+            if uses_tools(config) and not capability(*model).local_tools:
                 fail(422, "RUNTIME_UNSUPPORTED", "This model does not support local tools.")
             if example_errors(config["input_schema"], data, "input"):
                 fail(422, "AGENT_INPUT_SCHEMA_INVALID", "Workflow data does not match the agent input schema.")
-            input_text = _canonical(data)
+            from app.modules.agents import memory
+            memory_key = memory.conversation_key(config, data)
+            model_data = memory.model_input(data, memory.history(
+                db, master, workspace_id, version.agent_id, memory_key, config["memory"]["max_turns"],
+            )) if memory_key else data
+            input_text = _canonical(model_data)
             estimated_bytes = len((config["instructions"] + input_text + _canonical(config["output_schema"])).encode()) + 4096
             if estimated_bytes > MAX_INPUT_BYTES:
                 fail(422, "INPUT_TOO_LARGE", "Agent step input is too large.")
@@ -395,13 +415,14 @@ def _agent_handler(sessions, identity, token, workspace_id, master, graph, setti
             # dies after an earlier agent succeeded, both amounts survive.
             run.uncertain_cost_usd = budget
             db.commit()
-        if config.get("tool_keys") or config.get("mcp_tools") or config.get("http_tools"):
+        if uses_tools(config):
             output, input_tokens, output_tokens = generate_openai_with_tools(
-                key, version, data, max_output, timeout, settings,
+                key, prepared(version), model_data, max_output, timeout, settings,
                 active_check=active, budget_override=budget,
+                run_workflow=workflow_runner(node) if workflow_runner and config.get("workflow_tools") else None,
             )
         else:
-            output, input_tokens, output_tokens = generate(key, version, data, max_output, timeout)
+            output, input_tokens, output_tokens = generate(key, prepared(version), model_data, max_output, timeout)
         input_tokens, output_tokens = checked_usage(input_tokens, output_tokens)
         cost = input_price * input_tokens + output_price * output_tokens
         with sessions() as db:
@@ -411,6 +432,8 @@ def _agent_handler(sessions, identity, token, workspace_id, master, graph, setti
                 run.output_tokens = (run.output_tokens or 0) + output_tokens
                 run.cost_usd = (run.cost_usd or Decimal("0")) + cost
                 run.uncertain_cost_usd = None
+                if memory_key:
+                    memory.remember(db, master, workspace_id, version.agent_id, memory_key, data, output, config["memory"])
                 db.commit()
         return output, {
             "agent_version_id": str(version.id), "tool_keys": config.get("tool_keys", []), "input_tokens": input_tokens,

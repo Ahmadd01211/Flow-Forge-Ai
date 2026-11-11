@@ -24,7 +24,7 @@ def validate_graph(graph: Graph) -> dict:
         error("DUPLICATE_NODE", "Every node needs a unique ID.")
     if len({e.id for e in graph.edges}) != len(graph.edges):
         error("DUPLICATE_EDGE", "Every connection needs a unique ID.")
-    entry_types = {"manual_input", "webhook_trigger", "schedule_trigger"}
+    entry_types = {"manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"}
     entries = [n for n in graph.nodes if n.type in entry_types]
     results = [n for n in graph.nodes if n.type == "result"]
     if len(entries) != 1:

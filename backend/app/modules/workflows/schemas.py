@@ -53,6 +53,7 @@ class WorkflowRunRead(BaseModel):
     version_id: uuid.UUID
     automation_id: uuid.UUID | None
     deployment_id: uuid.UUID | None
+    source: Literal["manual", "chat", "webhook", "schedule", "deployment", "replay"] = "manual"
     state: Literal["queued", "running", "waiting", "completed", "failed", "cancelled"]
     requested_by: uuid.UUID
     pauses: list[WorkflowPauseRead] = Field(default_factory=list)
@@ -77,7 +78,7 @@ class WorkflowRunList(BaseModel):
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
-    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "agent", "tool", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait", "condition", "merge", "transform", "text_template", "list_filter", "json_parse", "result"]
+    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger", "agent", "llm", "tool", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait", "condition", "merge", "transform", "text_template", "list_filter", "json_parse", "result"]
     label: str = Field(min_length=1, max_length=100)
     position: Position
     join: Literal["all", "active"] = "all"

@@ -100,6 +100,7 @@ export interface ToolOption {
   name: string;
   description: string;
   input_schema: { properties?: Record<string, unknown>; required?: string[] };
+  read_only: boolean;
   installed: boolean;
 }
 export interface List<T> {

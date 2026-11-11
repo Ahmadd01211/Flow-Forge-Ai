@@ -90,6 +90,10 @@ class WorkflowRun(Base):
             "state IN ('queued','running','waiting','completed','failed','cancelled')",
             name="valid_workflow_run_state",
         ),
+        CheckConstraint(
+            "source IN ('manual','chat','webhook','schedule','deployment','replay')",
+            name="valid_workflow_run_source",
+        ),
         Index("ix_workflow_run_dispatch", "state", "last_dispatched_at"),
         Index("ix_workflow_run_history", "workspace_id", text("created_at DESC")),
         Index("ix_workflow_run_deployment", "deployment_id", "created_at"),
@@ -106,6 +110,7 @@ class WorkflowRun(Base):
     version_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
     deployment_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
     automation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
     requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False)
     idempotency_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
