@@ -2379,9 +2379,8 @@ export interface components {
             /**
              * Source Port
              * @default out
-             * @enum {string}
              */
-            source_port: "out" | "true" | "false";
+            source_port: string;
             /** Target */
             target: string;
             /**
@@ -2972,7 +2971,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "manual_input" | "webhook_trigger" | "schedule_trigger" | "chat_trigger" | "agent" | "llm" | "tool" | "mcp_tool" | "http_tool" | "subworkflow" | "for_each" | "approval" | "wait" | "condition" | "merge" | "transform" | "text_template" | "list_filter" | "json_parse" | "result";
+            type: "manual_input" | "webhook_trigger" | "schedule_trigger" | "chat_trigger" | "agent" | "llm" | "tool" | "mcp_tool" | "http_tool" | "subworkflow" | "for_each" | "approval" | "wait" | "condition" | "switch" | "merge" | "transform" | "text_template" | "list_filter" | "list_deduplicate" | "json_parse" | "result";
         };
         /** NodeTest */
         NodeTest: {

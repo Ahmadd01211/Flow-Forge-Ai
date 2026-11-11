@@ -2636,6 +2636,20 @@ label select {
 .port-label.false {
   top: 71%;
 }
+.flow-switch-ports {
+  margin: 0 -15px;
+}
+.flow-switch-port {
+  position: relative;
+  min-height: 32px;
+  padding: 8px 15px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.flow-switch-port code {
+  color: var(--muted);
+}
 .react-flow__controls {
   border: 1px solid #e0e5ee;
   border-radius: 6px !important;

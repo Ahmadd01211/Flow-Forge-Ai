@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { LocalTime } from "@/components/shared/local-time";
 import type { components } from "@/lib/api/generated";
+import { selectedPathLabel } from "@/features/workflows/node-config";
 
 export type WorkflowExecution = components["schemas"]["WorkflowRunRead"];
 type StepDetail = components["schemas"]["WorkflowStepDetail"];
@@ -460,7 +461,7 @@ export function WorkflowConsole({
                               ? ` · ${item.duration_ms} ms`
                               : ""}
                             {item.selected_port
-                              ? ` · ${item.selected_port} branch`
+                              ? ` · ${selectedPathLabel(item.selected_port)}`
                               : ""}
                             {item.error_code ? ` · ${item.error_code}` : ""}
                           </small>

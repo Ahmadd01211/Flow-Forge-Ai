@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/shared/ui";
 import { api } from "@/lib/api/client";
 import type { AgentRunSummary, Graph, GraphNode, NodeTestResult } from "@/lib/api/types";
-import { reshapes, resultSources } from "./node-config";
+import { reshapes, resultSources, selectedPathLabel } from "./node-config";
 
 export type NodeTestState = {
   input?: string;
@@ -151,7 +151,7 @@ export function NodeTestPanel({ workspaceId, workflowId, graph, node, tests, set
           <div className="row">
             {result.status === "completed" ? <CheckCircle2 size={14} /> : result.status === "failed" ? <AlertCircle size={14} /> : <LoaderCircle size={14} className="spin" />}
             <strong>{result.status === "queued" ? `Agent run ${result.agent_run?.state ?? "queued"}` : result.status === "completed" ? "Passed" : "Failed"}</strong>
-            {result.selected_port && <Badge tone={result.selected_port === "true" ? "green" : "amber"}>{result.selected_port} path</Badge>}
+            {result.selected_port && <Badge tone={node.type === "condition" && result.selected_port === "true" ? "green" : "amber"}>{selectedPathLabel(result.selected_port, node)}</Badge>}
             {result.status !== "queued" && !result.agent_run && <span className="muted">{result.duration_ms} ms</span>}
           </div>
           {state.configKey !== configKey && <p className="node-form-hint">Settings changed since this test. Run it again to check them.</p>}

@@ -22,6 +22,53 @@ export type Reference =
 export type NodeIssue = ValidationIssue & { severity: "error" | "warning" };
 export type NodeIssues = Record<string, NodeIssue[]>;
 
+export type SwitchCase = {
+  id: string;
+  label: string;
+  value: string | number | boolean | null;
+};
+
+export function switchCases(config: Record<string, unknown>): SwitchCase[] {
+  return Array.isArray(config.cases)
+    ? config.cases.filter(
+        (item): item is SwitchCase =>
+          item !== null &&
+          typeof item === "object" &&
+          typeof item.id === "string" &&
+          typeof item.label === "string",
+      )
+    : [];
+}
+
+export function outputPorts(
+  node: Pick<GraphNode, "type" | "config">,
+): { id: string; label: string }[] {
+  if (node.type === "result") return [];
+  if (node.type === "condition")
+    return [
+      { id: "true", label: "True" },
+      { id: "false", label: "False" },
+    ];
+  if (node.type === "switch")
+    return [
+      ...switchCases(node.config).map(({ id, label }) => ({ id, label })),
+      { id: "default", label: "Default" },
+    ];
+  return [{ id: "out", label: "Output" }];
+}
+
+/** Always retain the actual saved port, even when a definition is unavailable. */
+export function selectedPathLabel(
+  port: string,
+  node?: Pick<GraphNode, "type" | "config">,
+): string {
+  const label =
+    node?.type === "switch"
+      ? outputPorts(node).find((item) => item.id === port)?.label
+      : undefined;
+  return label ? `${label} path (${port})` : `${port} path`;
+}
+
 export const OPERATORS = [
   { value: "eq", label: "equals" },
   { value: "ne", label: "does not equal" },
@@ -158,6 +205,10 @@ export function configSummary(
 ): string | null {
   const config = node.config;
   switch (node.type) {
+    case "switch":
+      return `Route ${describeReference(config.value)} across ${switchCases(config).length} cases and default`;
+    case "list_deduplicate":
+      return `Remove duplicates from ${config.source || "input"}${config.item_pointer ? ` by ${config.item_pointer}` : ""}`;
     case "approval":
       return typeof config.prompt === "string"
         ? config.prompt
@@ -199,7 +250,10 @@ export function configSummary(
         : null;
     case "llm": {
       if (!config.model_id) return null;
-      const tools = ["tool_keys", "mcp_tools", "http_tools"].reduce((sum, key) => sum + ((config[key] as unknown[]) ?? []).length, 0);
+      const tools = ["tool_keys", "mcp_tools", "http_tools"].reduce(
+        (sum, key) => sum + ((config[key] as unknown[]) ?? []).length,
+        0,
+      );
       return `${config.model_id}${tools ? ` · ${tools} tool${tools === 1 ? "" : "s"}` : ""}`;
     }
     case "mcp_tool":

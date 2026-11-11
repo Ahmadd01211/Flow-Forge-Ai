@@ -14,6 +14,8 @@ import {
   isReference,
   issuesAt,
   templatePlaceholders,
+  switchCases,
+  type SwitchCase,
   type NodeIssue,
   type Reference,
 } from "./node-config";
@@ -195,10 +197,12 @@ function LiteralInput({
   value,
   onChange,
   label,
+  scalarOnly = false,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
   label: string;
+  scalarOnly?: boolean;
 }) {
   const type = literalType(value);
   return (
@@ -214,7 +218,7 @@ function LiteralInput({
         <option value="number">Number</option>
         <option value="boolean">True / false</option>
         <option value="null">Empty (null)</option>
-        <option value="json">JSON</option>
+        {!scalarOnly && <option value="json">JSON</option>}
       </select>
       {type === "text" && (
         <input
@@ -607,6 +611,160 @@ function TextTemplateForm({ node, issues, onChange, context }: FormProps) {
         Placeholders are field paths in double braces, such as{" "}
         <code>{"{{/ticket/id}}"}</code>. This step outputs{" "}
         <code>{"{ text }"}</code>.
+      </Hint>
+    </>
+  );
+}
+
+function SwitchForm({ node, issues, onChange, context }: FormProps) {
+  const cases = switchCases(node.config);
+  const save = (next: SwitchCase[]) =>
+    onChange({ ...node.config, cases: next });
+  const edit = (index: number, update: Partial<SwitchCase>) =>
+    save(cases.map((item, i) => (i === index ? { ...item, ...update } : item)));
+  const move = (index: number, offset: number) => {
+    const next = [...cases];
+    [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    save(next);
+  };
+  return (
+    <>
+      <ReferenceField
+        label="Value to route"
+        value={node.config.value}
+        onChange={(value) => onChange({ ...node.config, value })}
+        issues={issues}
+        path="config.value"
+        hints={context.inputHints}
+      />
+      <Hint>
+        Match exactly one case using the value and its type. Unmatched values
+        take the default path.
+      </Hint>
+      <FieldIssues issues={issues} path="config.cases" exact />
+      {cases.map((item, index) => (
+        <fieldset className="reference-field" key={item.id}>
+          <legend>Case {index + 1}</legend>
+          <label>
+            Label
+            <input
+              aria-label={`Case ${index + 1} label`}
+              maxLength={40}
+              value={item.label}
+              onChange={(event) => edit(index, { label: event.target.value })}
+            />
+          </label>
+          <FieldIssues issues={issues} path={`config.cases.${index}.label`} />
+          <span className="node-form-label">Match value</span>
+          <LiteralInput
+            label={`Case ${index + 1} value`}
+            value={item.value}
+            scalarOnly
+            onChange={(value) =>
+              edit(index, { value: value as SwitchCase["value"] })
+            }
+          />
+          <FieldIssues issues={issues} path={`config.cases.${index}.value`} />
+          <FieldIssues issues={issues} path={`config.cases.${index}.id`} />
+          <div className="row">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`Move case ${index + 1} up`}
+              disabled={index === 0}
+              onClick={() => move(index, -1)}
+            >
+              Move up
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`Move case ${index + 1} down`}
+              disabled={index === cases.length - 1}
+              onClick={() => move(index, 1)}
+            >
+              Move down
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`Remove case ${index + 1}`}
+              disabled={cases.length <= 1}
+              onClick={() => save(cases.filter((_, i) => i !== index))}
+            >
+              <Trash2 size={13} />
+              Remove
+            </Button>
+          </div>
+        </fieldset>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={cases.length >= 8}
+        onClick={() =>
+          save([
+            ...cases,
+            {
+              id: `case_${crypto.randomUUID().slice(0, 8)}`,
+              label: `Case ${cases.length + 1}`,
+              value: `case ${cases.length + 1}`,
+            },
+          ])
+        }
+      >
+        <Plus size={13} />
+        Add case
+      </Button>
+      <div className="node-info-card">
+        <strong>Default</strong>
+        <p>
+          Always available when no case matches. Removing a case also removes
+          its connection.
+        </p>
+      </div>
+    </>
+  );
+}
+
+function DeduplicateForm({ node, issues, onChange, context }: FormProps) {
+  return (
+    <>
+      <Field title="List to clean">
+        <PointerInput
+          label="List field path"
+          value={node.config.source}
+          placeholder="/items"
+          hints={context.inputHints}
+          onChange={(source) => onChange({ ...node.config, source })}
+        />
+        <FieldIssues issues={issues} path="config.source" />
+      </Field>
+      <Field title="Optional object field to compare">
+        <PointerInput
+          label="Item field path"
+          value={node.config.item_pointer ?? ""}
+          placeholder="/email (empty = the whole item)"
+          hints={[]}
+          onChange={(item_pointer) =>
+            onChange(
+              item_pointer
+                ? { ...node.config, item_pointer }
+                : without(node.config, "item_pointer"),
+            )
+          }
+        />
+        <FieldIssues issues={issues} path="config.item_pointer" />
+      </Field>
+      <Hint>
+        Keeps the first occurrence in original order, comparing values and
+        types. With an object field, missing fields stay separate and repeated
+        nulls collapse. Accepts up to 200 items and outputs{" "}
+        {"{ items, count, removed }"}.
       </Hint>
     </>
   );
@@ -1541,10 +1699,12 @@ const forms: Record<GraphNode["type"], (props: FormProps) => ReactNode> = {
   subworkflow: WorkflowCallForm,
   for_each: WorkflowCallForm,
   condition: ConditionForm,
+  switch: SwitchForm,
   merge: MergeForm,
   transform: TransformForm,
   text_template: TextTemplateForm,
   list_filter: ListFilterForm,
+  list_deduplicate: DeduplicateForm,
   json_parse: JsonParseForm,
   result: ResultForm,
 };

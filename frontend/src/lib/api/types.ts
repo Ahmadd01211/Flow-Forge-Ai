@@ -32,7 +32,7 @@ export interface GraphNode {
 export interface GraphEdge {
   id: string;
   source: string;
-  source_port: "out" | "true" | "false";
+  source_port: components["schemas"]["Edge"]["source_port"];
   target: string;
   target_port: "in";
   mappings: { from: string; to: string }[];
@@ -89,7 +89,7 @@ export interface NodeTestResult {
   type: NodeKind;
   status: "completed" | "failed" | "queued";
   output: unknown;
-  selected_port: "true" | "false" | null;
+  selected_port: string | null;
   error: { code: string; message: string } | null;
   duration_ms: number;
   external: boolean;

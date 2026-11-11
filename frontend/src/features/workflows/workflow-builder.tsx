@@ -20,6 +20,7 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
@@ -66,9 +67,15 @@ import { SaveTemplate } from "@/features/templates/save-template";
 import { Badge, ErrorNotice } from "@/components/shared/ui";
 import { api } from "@/lib/api/client";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
-import { connectInsertedNode } from "./graph-edit";
+import {
+  connectInsertedNode,
+  edgesAfterConfigEdit,
+  serializeEdges,
+} from "./graph-edit";
+import { PreviewSteps } from "./workflow-preview";
 import {
   configSummary,
+  outputPorts,
   inputFieldHints,
   issuesByNode,
   upstreamIds,
@@ -165,6 +172,24 @@ const kinds: {
     icon: GitBranch,
     tone: "amber",
     group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "switch",
+    name: "Switch",
+    description: "Route a value to a matching case or default",
+    icon: GitBranch,
+    tone: "amber",
+    group: "LOGIC",
+    enabled: true,
+  },
+  {
+    type: "list_deduplicate",
+    name: "Remove duplicates",
+    description: "Keep the first occurrence of each list item",
+    icon: ListFilter,
+    tone: "blue",
+    group: "DATA",
     enabled: true,
   },
   {
@@ -292,6 +317,11 @@ const FlowNode = memo(function FlowNode({
   const d = data.definition,
     kind = kinds.find((k) => k.type === d.type)!;
   const Icon = kind.icon;
+  const updateInternals = useUpdateNodeInternals();
+  const portsKey = JSON.stringify(outputPorts(d));
+  useEffect(() => {
+    updateInternals(d.id);
+  }, [d.id, portsKey, updateInternals]);
   const { issues: allIssues, checked, toolNames } = useContext(IssuesContext);
   const issues = allIssues[d.id] ?? [],
     errors = issues.filter((issue) => issue.severity === "error"),
@@ -358,7 +388,25 @@ const FlowNode = memo(function FlowNode({
         d.type !== "chat_trigger" && (
           <Handle type="target" position={Position.Left} id="in" />
         )}
+      {d.type === "switch" && (
+        <div className="flow-switch-ports">
+          {outputPorts(d).map((port) => (
+            <div className="flow-switch-port" key={port.id}>
+              <span>
+                {port.label} <code>({port.id})</code>
+              </span>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={port.id}
+                aria-label={`${port.label} output (${port.id})`}
+              />
+            </div>
+          ))}
+        </div>
+      )}
       {d.type !== "result" &&
+        d.type !== "switch" &&
         (d.type === "condition" ? (
           <>
             <Handle
@@ -424,7 +472,9 @@ export function WorkflowBuilder({
   skillOptions?: FormContext["skillOptions"];
   initialPublishedVersion: string | null;
 }) {
-  const preferredConnection = connections.find((item) => item.state === "active" && item.default_model_id);
+  const preferredConnection = connections.find(
+    (item) => item.state === "active" && item.default_model_id,
+  );
   const [workflowOptions, setWorkflowOptions] = useState(
     initialWorkflowOptions,
   );
@@ -439,9 +489,12 @@ export function WorkflowBuilder({
     [revision, setRevision] = useState(workflow.revision),
     [selected, setSelected] = useState<string | null>(
       workflow.graph.nodes.find((node) =>
-        ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
-          node.type,
-        ),
+        [
+          "manual_input",
+          "webhook_trigger",
+          "schedule_trigger",
+          "chat_trigger",
+        ].includes(node.type),
       )?.id || null,
     ),
     [busy, setBusy] = useState(false),
@@ -453,9 +506,12 @@ export function WorkflowBuilder({
     [configText, setConfigText] = useState(
       JSON.stringify(
         workflow.graph.nodes.find((node) =>
-          ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
-            node.type,
-          ),
+          [
+            "manual_input",
+            "webhook_trigger",
+            "schedule_trigger",
+            "chat_trigger",
+          ].includes(node.type),
         )?.config || {},
         null,
         2,
@@ -471,7 +527,13 @@ export function WorkflowBuilder({
   );
   const [previewResult, setPreviewResult] = useState<{
     output: unknown;
-    steps: { node_id: string; type: string; status: string; output: unknown }[];
+    steps: {
+      node_id: string;
+      type: string;
+      status: string;
+      output: unknown;
+      selected_port?: string | null;
+    }[];
   } | null>(null);
   const [publishedVersion, setPublishedVersion] = useState<string | null>(
     initialPublishedVersion,
@@ -490,14 +552,7 @@ export function WorkflowBuilder({
   const graph: Graph = {
     ...workflow.graph,
     nodes: nodes.map((n) => ({ ...n.data.definition, position: n.position })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      source_port: (e.sourceHandle || "out") as "out" | "true" | "false",
-      target: e.target,
-      target_port: "in",
-      mappings: (e.data?.mappings || []) as { from: string; to: string }[],
-    })),
+    edges: serializeEdges(edges),
   };
   const snapshot = JSON.stringify({ name, graph }),
     [baseline, setBaseline] = useState(snapshot),
@@ -643,11 +698,19 @@ export function WorkflowBuilder({
     if (type === "result" && nodes.some((n) => n.data.definition.type === type))
       return;
     if (
-      ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(type) &&
+      [
+        "manual_input",
+        "webhook_trigger",
+        "schedule_trigger",
+        "chat_trigger",
+      ].includes(type) &&
       nodes.some((n) =>
-        ["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"].includes(
-          n.data.definition.type,
-        ),
+        [
+          "manual_input",
+          "webhook_trigger",
+          "schedule_trigger",
+          "chat_trigger",
+        ].includes(n.data.definition.type),
       )
     ) {
       setError(
@@ -674,13 +737,15 @@ export function WorkflowBuilder({
               edges.find((edge) => edge.target === selectedNode.id)?.source,
           )
         : selectedNode;
-    const branchPort = port === "false" ? "false" : "true";
+    const sourcePorts = source ? outputPorts(source.data.definition) : [];
+    const branchPort =
+      sourcePorts.find((item) => item.id === port)?.id ??
+      sourcePorts[0]?.id ??
+      "out";
     const outgoing = source
       ? edges.filter(
           (edge) =>
-            edge.source === source.id &&
-            (source.data.definition.type !== "condition" ||
-              edge.sourceHandle === branchPort),
+            edge.source === source.id && edge.sourceHandle === branchPort,
         )
       : [];
     const next =
@@ -688,92 +753,108 @@ export function WorkflowBuilder({
         ? nodes.find((n) => n.id === outgoing[0].target)
         : undefined;
     const config: Record<string, unknown> =
-      type === "approval"
+      type === "switch"
         ? {
-            prompt: "Review the input before continuing.",
-            expires_seconds: 3600,
-            allow_requester: false,
+            value: { kind: "input", pointer: "" },
+            cases: [
+              {
+                id: `case_${crypto.randomUUID().slice(0, 8)}`,
+                label: "Case 1",
+                value: "match",
+              },
+            ],
           }
-        : type === "wait"
-          ? { seconds: 60 }
-          : type === "condition"
+        : type === "list_deduplicate"
+          ? { source: "/items" }
+          : type === "approval"
             ? {
-                operator: "eq",
-                left: { kind: "literal", value: true },
-                right: { kind: "literal", value: true },
+                prompt: "Review the input before continuing.",
+                expires_seconds: 3600,
+                allow_requester: false,
               }
-            : type === "agent"
-              ? { version_id: "" }
-              : type === "llm"
+            : type === "wait"
+              ? { seconds: 60 }
+              : type === "condition"
                 ? {
-                    instructions: "",
-                    provider: preferredConnection?.provider ?? "openai",
-                    model_id: preferredConnection?.default_model_id ?? "",
-                    tool_keys: [],
-                    mcp_tools: [],
-                    http_tools: [],
+                    operator: "eq",
+                    left: { kind: "literal", value: true },
+                    right: { kind: "literal", value: true },
                   }
-              : type === "subworkflow"
-                ? { version_id: "" }
-                : type === "for_each"
-                  ? {
-                      version_id: "",
-                      source: "/items",
-                      max_items: 3,
-                      input_mode: "envelope",
-                    }
-                  : type === "transform"
+                : type === "agent"
+                  ? { version_id: "" }
+                  : type === "llm"
                     ? {
-                        fields: { message: { kind: "literal", value: "" } },
-                        output_schema: {
-                          type: "object",
-                          properties: { message: { type: "string" } },
-                        },
+                        instructions: "",
+                        provider: preferredConnection?.provider ?? "openai",
+                        model_id: preferredConnection?.default_model_id ?? "",
+                        tool_keys: [],
+                        mcp_tools: [],
+                        http_tools: [],
                       }
-                    : type === "merge"
-                      ? { mode: "active" }
-                      : type === "text_template"
-                        ? { template: "Ticket {{/ticket/id}} is ready." }
-                        : type === "list_filter"
+                    : type === "subworkflow"
+                      ? { version_id: "" }
+                      : type === "for_each"
+                        ? {
+                            version_id: "",
+                            source: "/items",
+                            max_items: 3,
+                            input_mode: "envelope",
+                          }
+                        : type === "transform"
                           ? {
-                              source: "/items",
-                              item_pointer: "/status",
-                              operator: "eq",
-                              value: "open",
+                              fields: {
+                                message: { kind: "literal", value: "" },
+                              },
+                              output_schema: {
+                                type: "object",
+                                properties: { message: { type: "string" } },
+                              },
                             }
-                          : type === "json_parse"
-                            ? { source: "/text" }
-                            : type === "tool"
-                              ? { tool_key: "text.replace" }
-                              : type === "http_tool"
+                          : type === "merge"
+                            ? { mode: "active" }
+                            : type === "text_template"
+                              ? { template: "Ticket {{/ticket/id}} is ready." }
+                              : type === "list_filter"
                                 ? {
-                                    tool_id:
-                                      httpOptions.find(
-                                        (option) => option.state === "active",
-                                      )?.id || "",
+                                    source: "/items",
+                                    item_pointer: "/status",
+                                    operator: "eq",
+                                    value: "open",
                                   }
-                                : type === "mcp_tool"
-                                  ? {
-                                      server_id:
-                                        mcpOptions.find(
-                                          (option) =>
-                                            option.runnable_tools.length,
-                                        )?.id || "",
-                                      tool_name:
-                                        mcpOptions.find(
-                                          (option) =>
-                                            option.runnable_tools.length,
-                                        )?.runnable_tools[0] || "",
-                                    }
-                                  : type === "result"
-                                    ? {
-                                        value: {
-                                          kind: "output",
-                                          node_id: "input",
-                                          pointer: "",
-                                        },
-                                      }
-                                    : {};
+                                : type === "json_parse"
+                                  ? { source: "/text" }
+                                  : type === "tool"
+                                    ? { tool_key: "text.replace" }
+                                    : type === "http_tool"
+                                      ? {
+                                          tool_id:
+                                            httpOptions.find(
+                                              (option) =>
+                                                option.state === "active",
+                                            )?.id || "",
+                                        }
+                                      : type === "mcp_tool"
+                                        ? {
+                                            server_id:
+                                              mcpOptions.find(
+                                                (option) =>
+                                                  option.runnable_tools.length,
+                                              )?.id || "",
+                                            tool_name:
+                                              mcpOptions.find(
+                                                (option) =>
+                                                  option.runnable_tools.length,
+                                              )?.runnable_tools[0] || "",
+                                          }
+                                        : type === "result"
+                                          ? {
+                                              value: {
+                                                kind: "output",
+                                                node_id: "input",
+                                                pointer: "",
+                                              },
+                                            }
+                                          : {};
     const definition: GraphNode = {
       id,
       type,
@@ -803,7 +884,7 @@ export function WorkflowBuilder({
                 definition: {
                   ...existing.data.definition,
                   config:
-                    type === "condition" ||
+                    ["condition", "switch"].includes(type) ||
                     edges.filter((edge) => edge.target === next?.id).length > 1
                       ? {}
                       : { value: { kind: "output", node_id: id, pointer: "" } },
@@ -821,12 +902,12 @@ export function WorkflowBuilder({
     ]);
     if (source && source.data.definition.type !== "result") {
       if (outgoing.length === 1 && next) {
-        if (type === "condition") {
+        if (["condition", "switch"].includes(type)) {
           setEdges((current) => [
             ...current.map((edge) =>
               edge.id === outgoing[0].id ? { ...edge, target: id } : edge,
             ),
-            ...(["true", "false"] as const).map((branch) => ({
+            ...outputPorts(definition).map(({ id: branch }) => ({
               id: `edge-${crypto.randomUUID()}`,
               source: id,
               target: next.id,
@@ -854,8 +935,7 @@ export function WorkflowBuilder({
             id: `edge-${crypto.randomUUID()}`,
             source: source.id,
             target: id,
-            sourceHandle:
-              source.data.definition.type === "condition" ? branchPort : "out",
+            sourceHandle: branchPort,
             targetHandle: "in",
             type: "smoothstep",
             data: { mappings: [] },
@@ -884,6 +964,10 @@ export function WorkflowBuilder({
     [setEdges],
   );
   function updateNode(update: Partial<GraphNode>) {
+    if (active && update.config)
+      setEdges((current) =>
+        edgesAfterConfigEdit(current, active.data.definition, update.config!),
+      );
     setNodes((ns) =>
       ns.map((n) =>
         n.id === selected
@@ -992,6 +1076,7 @@ export function WorkflowBuilder({
           type: string;
           status: string;
           output: unknown;
+          selected_port?: string | null;
         }[];
       }>(
         `/workspaces/${workflow.workspace_id}/workflows/${workflow.id}/preview`,
@@ -1115,7 +1200,9 @@ export function WorkflowBuilder({
           </div>
         </div>
         <div className="builder-actions">
-          {nodes.some((node) => node.data.definition.type === "chat_trigger") && (
+          {nodes.some(
+            (node) => node.data.definition.type === "chat_trigger",
+          ) && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/w/${workflow.workspace_id}/workflows/${workflow.id}/chat`} title="Chat with the latest published version">
                 <MessageSquare size={14} />
@@ -1367,7 +1454,20 @@ export function WorkflowBuilder({
               >
                 <ReactFlow
                   nodes={nodes}
-                  edges={edges}
+                  edges={edges.map((edge) => {
+                    const source = graph.nodes.find(
+                      (node) => node.id === edge.source,
+                    );
+                    const label =
+                      source?.type === "switch"
+                        ? outputPorts(source).find(
+                            (item) => item.id === edge.sourceHandle,
+                          )?.label
+                        : undefined;
+                    return label
+                      ? { ...edge, label: `${label} (${edge.sourceHandle})` }
+                      : edge;
+                  })}
                   nodeTypes={nodeTypes}
                   onNodesChange={(changes) => {
                     if (changes.some((c) => c.type === "remove")) remember();
@@ -1577,15 +1677,26 @@ export function WorkflowBuilder({
                           ))}
                       </select>
                     </label>
-                    {active.data.definition.type === "condition" && (
+                    {["condition", "switch"].includes(
+                      active.data.definition.type,
+                    ) && (
                       <label>
                         Branch
                         <select
-                          value={port}
+                          value={
+                            outputPorts(active.data.definition).some(
+                              (item) => item.id === port,
+                            )
+                              ? port
+                              : outputPorts(active.data.definition)[0]?.id
+                          }
                           onChange={(e) => setPort(e.target.value)}
                         >
-                          <option value="true">True</option>
-                          <option value="false">False</option>
+                          {outputPorts(active.data.definition).map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.label} ({item.id})
+                            </option>
+                          ))}
                         </select>
                       </label>
                     )}
@@ -1601,11 +1712,11 @@ export function WorkflowBuilder({
                           source: active.id,
                           target,
                           sourceHandle:
-                            active.data.definition.type === "condition"
-                              ? port === "false"
-                                ? "false"
-                                : "true"
-                              : "out",
+                            outputPorts(active.data.definition).find(
+                              (item) => item.id === port,
+                            )?.id ??
+                            outputPorts(active.data.definition)[0]?.id ??
+                            "out",
                           targetHandle: "in",
                         });
                         setTarget("");
@@ -1966,11 +2077,7 @@ export function WorkflowBuilder({
                 <pre id="workflow-preview-output">
                   {JSON.stringify(previewResult.output, null, 2)}
                 </pre>
-                <small>
-                  {previewResult.steps
-                    .map((step) => `${step.node_id}: ${step.status}`)
-                    .join(" → ")}
-                </small>
+                <PreviewSteps nodes={graph.nodes} steps={previewResult.steps} />
               </>
             )}
           </div>

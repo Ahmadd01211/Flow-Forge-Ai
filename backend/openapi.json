@@ -1140,11 +1140,8 @@
           },
           "source_port": {
             "default": "out",
-            "enum": [
-              "out",
-              "true",
-              "false"
-            ],
+            "maxLength": 40,
+            "minLength": 1,
             "title": "Source Port",
             "type": "string"
           },
@@ -2324,10 +2321,12 @@
               "approval",
               "wait",
               "condition",
+              "switch",
               "merge",
               "transform",
               "text_template",
               "list_filter",
+              "list_deduplicate",
               "json_parse",
               "result"
             ],
