@@ -227,7 +227,18 @@ def revoke(
         ).all()
         for run in runs:
             run.cancel_requested_at = now
-            if run.state == "queued":
+            if run.state == "waiting" and isinstance(run, AgentRun):
+                from app.modules.executions.agent_approvals import cancel_waiting
+
+                cancel_waiting(db, run, now)
+                run.state, run.error_code, run.finished_at, run.claim_token = (
+                    "cancelled", None, now, None
+                )
+            elif run.state == "queued":
+                if isinstance(run, AgentRun):
+                    from app.modules.executions.agent_approvals import cancel_waiting
+
+                    cancel_waiting(db, run, now)
                 run.state = "cancelled"
                 run.finished_at = now
                 if isinstance(run, WorkflowRun):

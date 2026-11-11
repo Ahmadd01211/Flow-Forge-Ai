@@ -33,7 +33,7 @@ export function RunConsole({
   const base = `/workspaces/${workspaceId}/runs`;
   const selected = runs.find((run) => run.id === selectedId);
   const selectedState = selected?.state;
-  const hasActive = runs.some((run) => !terminal.has(run.state));
+  const hasActive = runs.some((run) => !terminal.has(run.state) && run.state !== "waiting");
 
   useEffect(() => {
     if (!hasActive) return;
@@ -60,7 +60,9 @@ export function RunConsole({
       }
     }
     void refreshTrace();
-    const timer = selectedState && !terminal.has(selectedState) ? window.setInterval(refreshTrace, 3000) : null;
+    const timer = selectedState && selectedState !== "waiting" && !terminal.has(selectedState)
+      ? window.setInterval(refreshTrace, 3000)
+      : null;
     return () => { live = false; if (timer) window.clearInterval(timer); };
   }, [base, selectedId, selectedState]);
 
@@ -178,6 +180,11 @@ export function RunConsole({
                 <div className="run-warning">The provider request may have completed, but its outcome could not be confirmed. Up to ${selected.uncertain_cost_usd} may have been charged.</div>
               )}
               {selected.error_code && <ErrorNotice message={`Run ended: ${selected.error_code.replaceAll("_", " ").toLowerCase()}.`} />}
+              {selected.state === "waiting" && (
+                <div className="run-warning">
+                  This run is paused for a tool approval. Open its trace to review the call and see its status.
+                </div>
+              )}
               {selected.output && (
                 <div className="run-output"><div className="run-panel-heading"><h3>Output</h3><Badge tone="green">Validated JSON</Badge></div><pre>{JSON.stringify(selected.output, null, 2)}</pre></div>
               )}

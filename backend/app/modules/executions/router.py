@@ -95,6 +95,43 @@ def run_trace(workspace_id: uuid.UUID, run_id: uuid.UUID, request: Request, db: 
     return trace.build(db, master, run, service.public_run(run, master), member.user_id)
 
 
+class ToolApprovalDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
+
+
+@router.post(
+    "/{run_id}/tool-approvals/{approval_id}", dependencies=[Depends(check_csrf)]
+)
+def decide_tool_approval(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    approval_id: uuid.UUID,
+    body: ToolApprovalDecision,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    _, member = authorize(request, db, workspace_id, write=True)
+    master = load_master_key(request.app.state.settings.credential_key_path)
+    from app.modules.executions.agent_approvals import decide
+
+    approval = decide(
+        db,
+        workspace_id,
+        run_id,
+        approval_id,
+        member.user_id,
+        body.decision,
+        master,
+    )
+    run = service.get_run(db, workspace_id, run_id)
+    return {
+        "approval_id": approval.id,
+        "approval_state": approval.state,
+        "run": service.public_run(run, master),
+    }
+
+
 @router.put("/{run_id}/feedback", dependencies=[Depends(check_csrf)])
 def give_feedback(workspace_id: uuid.UUID, run_id: uuid.UUID, body: FeedbackWrite, request: Request, db: Session = Depends(get_db)) -> dict:
     _, member = authorize(request, db, workspace_id)

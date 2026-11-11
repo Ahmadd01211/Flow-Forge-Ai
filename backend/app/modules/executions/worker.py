@@ -9,7 +9,7 @@ from sqlalchemy import or_, select
 from app import models  # noqa: F401 -- workers start without API router imports
 from app.core.config import Settings
 from app.core.db import make_sessions
-from app.modules.executions.models import AgentRun
+from app.modules.executions.models import AgentRun, AgentToolApproval
 from app.modules.executions.runtime import execute
 from app.modules.workflows.checkpoints import settle_unfinished
 from app.modules.workflows.models import WorkflowRun, WorkflowVersion
@@ -103,6 +103,12 @@ def reconcile_once() -> int:
     now = datetime.now(UTC)
     dispatched = []
     try:
+        from app.core.credentials import load_master_key
+        from app.modules.executions.agent_approvals import reconcile as reconcile_agent_approvals
+
+        reconcile_agent_approvals(
+            sessions, load_master_key(settings.credential_key_path), now
+        )
         with sessions() as db:
             rows = db.scalars(
                 select(AgentRun)
@@ -118,6 +124,13 @@ def reconcile_once() -> int:
                         (AgentRun.state == "running")
                         & AgentRun.model_started_at.is_(None)
                         & (AgentRun.started_at < now - timedelta(seconds=45)),
+                        (AgentRun.state == "running")
+                        & (AgentRun.started_at < now - timedelta(seconds=45))
+                        & AgentRun.id.in_(
+                            select(AgentToolApproval.run_id).where(
+                                AgentToolApproval.state.in_(["claimed", "ready", "resuming"])
+                            )
+                        ),
                     )
                 )
                 .order_by(AgentRun.created_at)
@@ -126,6 +139,14 @@ def reconcile_once() -> int:
             ).all()
             for run in rows:
                 if run.deadline_at <= now:
+                    from app.modules.executions.agent_approvals import invalidate_for_run
+
+                    invalidate_for_run(
+                        db,
+                        run,
+                        "RUN_CANCELLED" if run.cancel_requested_at else "RUN_TIMEOUT",
+                        now,
+                    )
                     run.state = "cancelled" if run.cancel_requested_at else "failed"
                     run.error_code = None if run.cancel_requested_at else "RUN_TIMEOUT"
                     run.uncertain_cost_usd = run.reserved_max_usd if run.model_started_at else None
@@ -140,6 +161,56 @@ def reconcile_once() -> int:
                     run.claim_token = None
                     run.started_at = None
                     run.last_dispatched_at = None
+                elif run.state == "running":
+                    approval = db.scalar(
+                        select(AgentToolApproval)
+                        .where(
+                            AgentToolApproval.workspace_id == run.workspace_id,
+                            AgentToolApproval.run_id == run.id,
+                            AgentToolApproval.state.in_(["claimed", "ready", "resuming"]),
+                        )
+                        .with_for_update()
+                    )
+                    if approval:
+                        if approval.state == "ready":
+                            # The MCP result and next provider transcript are encrypted in
+                            # this row, so re-entering the loop cannot replay the tool call.
+                            run.state = "queued"
+                            run.claim_token = None
+                            run.started_at = None
+                            run.model_started_at = None
+                            run.last_dispatched_at = None
+                            continue
+                        if approval.state == "resuming":
+                            # The MCP output is safely persisted, but a provider
+                            # continuation may have started. Fail without replaying it.
+                            approval.state = "completed"
+                            approval.settled_at = now
+                            approval.ciphertext = b""
+                            run.state = "failed"
+                            run.error_code = "PROVIDER_OUTCOME_UNKNOWN"
+                            run.uncertain_cost_usd = run.reserved_max_usd
+                            run.finished_at = now
+                            run.claim_token = None
+                            continue
+                        approval.state = "uncertain"
+                        approval.settled_at = now
+                        approval.ciphertext = b""
+                        run.state = "failed"
+                        run.error_code = "EXTERNAL_OUTCOME_UNKNOWN"
+                        run.uncertain_cost_usd = run.reserved_max_usd
+                        run.finished_at = now
+                        run.claim_token = None
+                        from app.modules.audit.service import record
+
+                        record(
+                            db,
+                            run.workspace_id,
+                            run.requested_by,
+                            "agent_tool_approval.execution_uncertain",
+                            approval.id,
+                            {"run_id": str(run.id), "tool_key": approval.tool_key},
+                        )
             db.commit()
         for run_id in dispatched:
             try:

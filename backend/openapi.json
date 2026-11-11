@@ -437,6 +437,50 @@
         "title": "ApprovalDecision",
         "type": "object"
       },
+      "AssistRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "context": {
+            "additionalProperties": true,
+            "title": "Context",
+            "type": "object"
+          },
+          "model_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model Id",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "openai",
+              "openrouter",
+              "anthropic",
+              "gemini",
+              "deepseek"
+            ],
+            "title": "Provider",
+            "type": "string"
+          },
+          "task": {
+            "enum": [
+              "improve",
+              "draft",
+              "examples"
+            ],
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "provider",
+          "model_id",
+          "context"
+        ],
+        "title": "AssistRequest",
+        "type": "object"
+      },
       "AutomationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2827,6 +2871,7 @@
             "enum": [
               "queued",
               "running",
+              "waiting",
               "completed",
               "failed",
               "cancelled"
@@ -3377,6 +3422,24 @@
           "token"
         ],
         "title": "TokenRequest",
+        "type": "object"
+      },
+      "ToolApprovalDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "ToolApprovalDecision",
         "type": "object"
       },
       "ToolInvoke": {
@@ -5675,6 +5738,71 @@
         "summary": "Create Agent",
         "tags": [
           "agents"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/agents/assist": {
+      "post": {
+        "description": "Start a builder AI helper as a normal, budgeted agent run with the chosen model.",
+        "operationId": "assist_api_v1_workspaces__workspace_id__agents_assist_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Assist Api V1 Workspaces  Workspace Id  Agents Assist Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assist",
+        "tags": [
+          "agent-workbench"
         ]
       }
     },
@@ -9542,6 +9670,81 @@
           }
         },
         "summary": "Give Feedback",
+        "tags": [
+          "executions"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/runs/{run_id}/tool-approvals/{approval_id}": {
+      "post": {
+        "operationId": "decide_tool_approval_api_v1_workspaces__workspace_id__runs__run_id__tool_approvals__approval_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Approval Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Decide Tool Approval Api V1 Workspaces  Workspace Id  Runs  Run Id  Tool Approvals  Approval Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Tool Approval",
         "tags": [
           "executions"
         ]

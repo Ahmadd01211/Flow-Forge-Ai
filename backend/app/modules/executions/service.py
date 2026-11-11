@@ -225,7 +225,16 @@ def cancel(
         return run
     now = datetime.now(UTC)
     run.cancel_requested_at = now
-    if run.state == "queued" or not run.model_started_at:
+    if run.state == "waiting":
+        from app.modules.executions.agent_approvals import cancel_waiting
+
+        cancel_waiting(db, run, now)
+        run.state, run.error_code, run.finished_at, run.claim_token = "cancelled", None, now, None
+    elif run.state == "queued" or not run.model_started_at:
+        if run.state == "queued":
+            from app.modules.executions.agent_approvals import cancel_waiting
+
+            cancel_waiting(db, run, now)
         run.state = "cancelled"
         run.finished_at = now
     record(db, workspace_id, actor_id, "agent_run.cancel_requested", run.id, {"state": run.state})

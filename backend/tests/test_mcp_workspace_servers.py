@@ -164,15 +164,15 @@ def test_agent_calls_allowed_write_tool_and_block_stops_next_run(client, owner, 
     )
     run_id = queued(client, base, version.json(), key="write-tool-0001")
     execute(run_id, client.app.state.settings)
-    assert client.get(f"{base}/runs/{run_id}").json()["state"] == "completed"
-    assert remote == [(SECRET_URL, "tracker-token", "create_issue", {"title": "Login fails"})]
+    assert client.get(f"{base}/runs/{run_id}").json()["state"] == "waiting"
+    assert remote == []  # Write-capable MCP calls pause for an independent approval.
 
     # A run queued before the block must not reach the server; new runs are refused outright.
     second = queued(client, base, version.json(), key="write-tool-0002")
     client.patch(f"{base}/mcp/{server_id}/tools/create_issue", headers=headers(client), json={"policy": "block"})
     execute(second, client.app.state.settings)
     failed = client.get(f"{base}/runs/{second}").json()
-    assert failed["state"] == "failed" and len(remote) == 1, failed
+    assert failed["state"] == "failed" and len(remote) == 0, failed
     refused = client.post(
         f"{base}/runs",
         headers={**headers(client), "Idempotency-Key": "write-tool-0003"},

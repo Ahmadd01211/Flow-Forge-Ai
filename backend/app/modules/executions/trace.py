@@ -82,6 +82,8 @@ def build(db: Session, master: bytes, run: AgentRun, public: dict, user_id: uuid
     prices = MODEL_PRICES.get((config.get("provider", "openai"), config.get("model_id")))
     timeline = steps(db, master, run, prices)
     input_value = json.loads(decrypt_secret(master, run.workspace_id, run.id, 1, run.input_nonce, run.input_ciphertext))
+    from app.modules.executions.agent_approvals import public_summary
+
     return {
         "run": public,
         "input": input_value,
@@ -97,6 +99,7 @@ def build(db: Session, master: bytes, run: AgentRun, public: dict, user_id: uuid
             "source": "deployment" if run.deployment_id else "test" if agent.playground_for or agent.workflow_id or agent.system_role else "manual",
         },
         "steps": timeline,
+        "tool_approval": public_summary(db, master, run, user_id),
         "totals": {
             "duration_ms": int((run.finished_at - (run.started_at or run.created_at)).total_seconds() * 1000) if run.finished_at else None,
             "model_calls": sum(step["kind"] == "model" for step in timeline),

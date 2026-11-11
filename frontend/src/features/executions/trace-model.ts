@@ -25,6 +25,19 @@ export interface TraceData {
   input: unknown;
   agent: { id: string; workflow_id: string | null; name: string; version_number: number; provider: string; model_id: string; playground: boolean; skills: { name: string; number: number | null }[]; source: string };
   steps: TraceStep[];
+  tool_approval: {
+    id: string;
+    state: string;
+    tool_key: string;
+    tool: { server_id: string; server_name: string; tool_name: string; description: string; read_only: boolean } | null;
+    arguments: unknown;
+    requester: { id: string; name: string };
+    deployment: { id: string; name: string } | null;
+    expires_at: string;
+    decided_at: string | null;
+    decided_by: string | null;
+    may_decide: boolean;
+  } | null;
   totals: { duration_ms: number | null; model_calls: number; tool_calls: number };
   feedback: Feedback;
 }

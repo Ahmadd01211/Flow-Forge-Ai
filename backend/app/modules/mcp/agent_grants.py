@@ -17,14 +17,13 @@ def alias(grant):
     return "mcp_" + hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
-def resolve(db, workspace_id, grant, raw_catalog, pinned=False):
+def resolve(db, workspace_id, grant, raw_catalog, pinned=False, lock=False):
     profile = registry.server(db, workspace_id, grant["server_id"], raw_catalog)
-    row = db.scalar(
-        select(McpConnection).where(
+    query = select(McpConnection).where(
             McpConnection.workspace_id == workspace_id,
             McpConnection.server_id == grant["server_id"],
         )
-    )
+    row = db.scalar(query.with_for_update() if lock else query)
     snapshot = registry.snapshot(row, grant["tool_name"])
     if not registry.runnable(profile, row, grant["tool_name"]):
         fail(
@@ -70,7 +69,7 @@ def validate_grants(db, workspace_id, config, raw_catalog):
         resolve(db, workspace_id, grant, raw_catalog, pinned=True)
 
 
-def invoke(settings, workspace_id, grant, arguments, timeout):
+def invoke(settings, workspace_id, grant, arguments, timeout, expected_identity=None):
     from app.core.db import make_sessions
     from app.modules.mcp.client import call_tool
 
@@ -79,8 +78,30 @@ def invoke(settings, workspace_id, grant, arguments, timeout):
     try:
         with sessions() as db:
             profile, row, snapshot = resolve(
-                db, workspace_id, grant, settings.mcp_catalog_json, pinned=True
+                db,
+                workspace_id,
+                grant,
+                settings.mcp_catalog_json,
+                pinned=True,
+                lock=expected_identity is not None,
             )
+            if expected_identity is not None:
+                current_identity = {
+                    "server_id": grant["server_id"],
+                    "server_name": profile.get("name", grant["server_id"]),
+                    "tool_name": grant["tool_name"],
+                    "description": (snapshot.get("description") or "")[:300],
+                    "connection_generation": row.generation,
+                    "input_schema_hash": schema_hash(snapshot["input_schema"]),
+                    "policy": registry.policy(profile, row, grant["tool_name"]),
+                    "read_only": registry.read_only(profile, row, grant["tool_name"]),
+                }
+                if current_identity != expected_identity:
+                    fail(
+                        409,
+                        "APPROVAL_CONTEXT_CHANGED",
+                        "The MCP tool permission changed after approval.",
+                    )
             if example_errors(snapshot["input_schema"], arguments, "arguments"):
                 fail(
                     422,
@@ -90,6 +111,19 @@ def invoke(settings, workspace_id, grant, arguments, timeout):
             url, token = registry.endpoint(
                 profile, row, load_master_key(settings.credential_key_path)
             )
+            if expected_identity is not None:
+                # Keep the tool-policy row locked through the outbound call so
+                # an admin's policy edit cannot race the final approval check.
+                result = call_tool(
+                    url,
+                    token,
+                    grant["tool_name"],
+                    arguments,
+                    timeout_seconds=min(12.0, timeout),
+                )
+                if result.get("isError"):
+                    fail(502, "MCP_TOOL_FAILED", "The MCP tool reported a failure.")
+                return result
         result = call_tool(
             url, token, grant["tool_name"], arguments, timeout_seconds=min(12.0, timeout)
         )

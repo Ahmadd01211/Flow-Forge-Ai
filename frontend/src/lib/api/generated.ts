@@ -398,6 +398,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/agents/assist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assist
+         * @description Start a builder AI helper as a normal, budgeted agent run with the chosen model.
+         */
+        post: operations["assist_api_v1_workspaces__workspace_id__agents_assist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/agents/library": {
         parameters: {
             query?: never;
@@ -1335,6 +1355,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_id}/runs/{run_id}/tool-approvals/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Tool Approval */
+        post: operations["decide_tool_approval_api_v1_workspaces__workspace_id__runs__run_id__tool_approvals__approval_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_id}/runs/{run_id}/trace": {
         parameters: {
             query?: never;
@@ -2095,6 +2132,25 @@ export interface components {
              * @enum {string}
              */
             decision: "approve" | "reject";
+        };
+        /** AssistRequest */
+        AssistRequest: {
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            };
+            /** Model Id */
+            model_id: string;
+            /**
+             * Provider
+             * @enum {string}
+             */
+            provider: "openai" | "openrouter" | "anthropic" | "gemini" | "deepseek";
+            /**
+             * Task
+             * @enum {string}
+             */
+            task: "improve" | "draft" | "examples";
         };
         /** AutomationCreate */
         AutomationCreate: {
@@ -3122,7 +3178,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "queued" | "running" | "completed" | "failed" | "cancelled";
+            state: "queued" | "running" | "waiting" | "completed" | "failed" | "cancelled";
             /** Uncertain Cost Usd */
             uncertain_cost_usd: string | null;
             /**
@@ -3360,6 +3416,14 @@ export interface components {
         TokenRequest: {
             /** Token */
             token: string;
+        };
+        /** ToolApprovalDecision */
+        ToolApprovalDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
         };
         /** ToolInvoke */
         ToolInvoke: {
@@ -4602,6 +4666,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assist_api_v1_workspaces__workspace_id__agents_assist_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -6919,6 +7022,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_tool_approval_api_v1_workspaces__workspace_id__runs__run_id__tool_approvals__approval_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+                run_id: string;
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolApprovalDecision"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
