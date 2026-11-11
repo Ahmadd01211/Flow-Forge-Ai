@@ -102,7 +102,7 @@ Implementation note: Vitest has no DOM environment, so keyboard wraparound and c
 - [x] **Step 4: Record fresh evidence and document manual GUI steps**
 - [x] **Step 5: Commit the task, review the branch, and push the current feature branch**
 
-Implementation note: the first review found that Enter at initial focus could select the first tool without a search or arrow-key action. Added a failing rendered-markup assertion, initialized the active index to none, and reran picker tests, lint, typecheck, full Vitest, API drift, and production build successfully.
+Implementation note: Enter at initial focus does not select a tool until the user searches or navigates. Final review found that keyboard navigation could highlight off-screen results and an empty query result could leave a stale active descendant; both were fixed with RED/GREEN model/component tests, and active options now scroll into view. Final frontend tests, lint, typecheck, API drift, and production build passed.
 
 ## Task graph
 

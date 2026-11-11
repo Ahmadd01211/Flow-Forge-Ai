@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { McpToolPicker } from "./mcp-tool-picker";
+import { McpToolPicker, McpToolPickerResults } from "./mcp-tool-picker";
+import { mcpToolOptions, filterMcpToolOptions } from "./mcp-tool-picker-model";
 
 const options = [
   {
@@ -50,6 +51,16 @@ describe("MCP workflow picker", () => {
   });
 
   it("shows a useful no-match state and keeps the Integrations recovery link when empty", () => {
+    const noMatches = renderToStaticMarkup(
+      createElement(McpToolPickerResults, {
+        options: filterMcpToolOptions(mcpToolOptions(options), "nothing matches"),
+        activeIndex: 0,
+        selected: { server_id: "", tool_name: "" },
+        onChoose: vi.fn(),
+      }),
+    );
+    expect(noMatches).toContain("No allowed tools match this search");
+
     const noTools = renderToStaticMarkup(
       createElement(McpToolPicker, {
         workspaceId: "workspace-1",

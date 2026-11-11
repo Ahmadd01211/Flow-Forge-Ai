@@ -49,6 +49,33 @@ export function nextMcpToolIndex(
   return current;
 }
 
+export function mcpToolActiveDescendant(
+  open: boolean,
+  activeIndex: number,
+  count: number,
+): string | undefined {
+  return open && activeIndex >= 0 && activeIndex < count
+    ? `mcp-tool-option-${activeIndex}`
+    : undefined;
+}
+
+type ScrollableListbox = {
+  querySelector: (
+    selectors: string,
+  ) => { scrollIntoView: (options: { block: "nearest" }) => void } | null;
+};
+
+export function scrollMcpToolIntoView(
+  listbox: ScrollableListbox | null,
+  activeIndex: number,
+  count: number,
+): void {
+  if (!listbox || activeIndex < 0 || activeIndex >= count) return;
+  listbox
+    .querySelector(`#mcp-tool-option-${activeIndex}`)
+    ?.scrollIntoView({ block: "nearest" });
+}
+
 export function mcpToolConfig(option: McpToolOption): {
   server_id: string;
   tool_name: string;

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  mcpToolActiveDescendant,
   filterMcpToolOptions,
   mcpToolConfig,
   mcpToolOptions,
+  scrollMcpToolIntoView,
   nextMcpToolIndex,
 } from "./mcp-tool-picker-model";
 
@@ -99,5 +101,19 @@ describe("MCP workflow picker model", () => {
     ]);
     expect(filterMcpToolOptions(options, "not found")).toEqual([]);
     expect(options[0].readOnly).toBeNull();
+  });
+
+  it("only exposes a valid active descendant and scrolls the active result into view", () => {
+    expect(mcpToolActiveDescendant(true, 0, 0)).toBeUndefined();
+    expect(mcpToolActiveDescendant(false, 0, 1)).toBeUndefined();
+    expect(mcpToolActiveDescendant(true, 1, 2)).toBe("mcp-tool-option-1");
+
+    const scrollIntoView = vi.fn();
+    const querySelector = vi.fn(() => ({ scrollIntoView }));
+    scrollMcpToolIntoView({ querySelector }, 1, 2);
+    expect(querySelector).toHaveBeenCalledWith("#mcp-tool-option-1");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    scrollMcpToolIntoView({ querySelector }, 2, 2);
+    expect(querySelector).toHaveBeenCalledTimes(1);
   });
 });
