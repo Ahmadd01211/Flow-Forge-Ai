@@ -82,9 +82,9 @@
 - Keep provider secrets server-side; user-facing error copy contains no key material or raw credential-bearing request data.
 - Provider setup flow distinguishes key verification, model discovery, and runnable model selection.
 
-- [ ] **Step 1: Write reproducible UI/model tests for verify success, rejected credentials, model-catalog failure/empty result, switching providers, and saved default selection.**
-- [ ] **Step 2: Run them and record the exact failing stage and evidence.**
-- [ ] **Step 3: Trace the failing value through UI → API → provider adapter → returned state.** Change one root cause only after the failure is localized; if all tests pass, add coverage and improve recovery copy/state only where the current path is demonstrably ambiguous.
+- [ ] **Step 1: Write component/model tests** for successful key verification and model selection/save, rejected credentials without key echo, provider switching clears the unsaved key/error, model catalog refresh failure preserves the prior backend catalog/default, and empty model states distinguish “no runnable models” from “no search matches.”
+- [ ] **Step 2: Run the tests and reproduce any failure.** The existing UI computes `models` from verified models then filters out non-runnable entries by default; specifically check the reproducible state where `verified_models` is nonempty, all capabilities are setup-only, and the search is empty. Record exact rendered copy and layer.
+- [ ] **Step 3: Trace any failing value through UI → API client → integration router/service → provider adapter → returned state.** Change one root cause only after the failure is localized. When existing behavior is correct, retain it and add coverage; improve recovery copy only for an ambiguous state the test demonstrates.
 - [ ] **Step 4: Re-run focused and existing provider integration tests.** Never call a live provider without user-provided credentials.
 - [ ] **Step 5: Run frontend typecheck/lint and relevant backend tests; commit.**
 
