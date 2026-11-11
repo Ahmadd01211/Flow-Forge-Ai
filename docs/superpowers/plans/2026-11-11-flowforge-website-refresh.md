@@ -53,8 +53,8 @@
 
 **Files:** `docs/PROJECT_STATUS.md`, `docs/DEVELOPMENT_PHASES.md`, `docs/manual-testing/noncoder-creation.md`.
 
-- [ ] Align product status and development phases with the actual shipped feature inventory.
-- [ ] Write a concise manual GUI route covering registration/workspace start, template preview/creation, provider setup, agent skill publishing, local workflow preview and published full run.
-- [ ] Confirm every documented action and route exists in the application.
-- [ ] Commit.
+- [x] Align product status and development phases with the actual shipped feature inventory: 15 recipes, 11 skills and 22 workflow node types.
+- [x] Write a concise manual GUI route for registration/workspace start, template preview/creation, provider setup, skill publishing, local preview and published full run, including the new practical node recipes.
+- [x] Confirm documented actions/routes exist; 21 local Markdown links and 16 route variants checked; independent docs review approved.
+- [x] Commit `941cb4a`. Signed-in GUI and live-provider acceptance remain explicitly for the user.
 
