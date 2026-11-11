@@ -20,15 +20,15 @@ import { Button } from "@/components/ui/button";
 export default function Landing() {
   return (
     <div className="landing">
-      <nav className="marketing-nav">
-        <Link href="/">
+      <nav className="marketing-nav" aria-label="Main navigation">
+        <Link href="/" aria-label="FlowForge home">
           <Brand />
         </Link>
         <div className="marketing-links">
           <a href="#how-it-works">How it works</a>
           <a href="#control">Built for control</a>
           <a href="/api/docs">
-            API reference <ArrowUpRight size={13} />
+            API reference <ArrowUpRight size={13} aria-hidden="true" />
           </a>
         </div>
         <div className="row">
@@ -37,7 +37,7 @@ export default function Landing() {
           </Link>
           <Button asChild size="sm">
             <Link href="/register">
-              Start building <ArrowRight size={15} />
+              Start building <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </Button>
         </div>
@@ -72,91 +72,96 @@ export default function Landing() {
             <div className="row hero-actions">
               <Button asChild>
                 <Link href="/register">
-                  Create your workspace <ArrowRight size={17} />
+                  Create your workspace{" "}
+                  <ArrowRight size={17} aria-hidden="true" />
                 </Link>
               </Button>
               <Button asChild variant="outline">
                 <a href="#product-demo">
-                  <Play size={15} /> See the product demo
+                  <Play size={15} aria-hidden="true" /> See the product demo
                 </a>
               </Button>
             </div>
             <div className="hero-foot">
-              <ShieldCheck size={15} /> Review setup. Test a sample. Publish
-              when ready.
+              <ShieldCheck size={15} aria-hidden="true" /> Review setup. Test a
+              sample. Publish when ready.
             </div>
           </div>
-          <div
+          <section
             className="hero-visual"
             id="product-demo"
-            aria-label="Illustrative support triage workflow"
+            aria-labelledby="product-demo-title"
+            aria-describedby="product-demo-caption"
+            tabIndex={-1}
           >
             <div className="visual-toolbar">
-              <span>
-                <Workflow size={15} /> Support ticket triage
-              </span>
+              <h2 id="product-demo-title">
+                <Workflow size={17} aria-hidden="true" /> Support ticket triage
+              </h2>
               <span className="sample-tag">ILLUSTRATIVE WORKFLOW</span>
             </div>
-            <div className="visual-canvas">
-              <svg viewBox="0 0 600 470" aria-hidden="true">
-                <path d="M130 115 H225 Q245 115 245 145 V185 H300 M300 245 V300 M300 300 H135 V355 M300 300 H460 V355" />
-              </svg>
-              <div className="preview-node trigger">
-                <span className="node-icon teal">
-                  <Zap size={19} />
-                </span>
-                <div>
-                  <small>SAMPLE INPUT</small>
-                  <strong>A support ticket</strong>
-                  <p>Describe the issue and context</p>
+            <ol className="visual-canvas" aria-label="Support triage steps">
+              <li className="preview-step">
+                <p className="step-label">Step 1 · Sample input</p>
+                <div className="preview-node trigger">
+                  <span className="node-icon teal">
+                    <Zap size={19} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <strong>A support ticket</strong>
+                    <p>Describe the issue and context</p>
+                  </div>
                 </div>
-              </div>
-              <div className="preview-node intelligence">
-                <span className="node-icon purple">
-                  <Bot size={21} />
-                </span>
-                <div>
-                  <small>CONFIGURED AGENT</small>
-                  <strong>Understand & classify</strong>
-                  <p>Priority · intent · next step</p>
+              </li>
+              <li className="preview-step">
+                <p className="step-label">Step 2 · Configured agent</p>
+                <div className="preview-node intelligence">
+                  <span className="node-icon purple">
+                    <Bot size={21} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <strong>Understand & classify</strong>
+                    <p>Priority · intent · next step</p>
+                    <span className="mini-label">8 turn cap</span>
+                  </div>
                 </div>
-                <span className="mini-label">8 turn cap</span>
-              </div>
-              <div className="branch-label">
-                <GitBranch size={15} /> Route by priority
-              </div>
-              <div className="preview-node result-one">
-                <span className="node-icon amber">
-                  <GitBranch size={18} />
-                </span>
-                <div>
-                  <small>URGENT</small>
-                  <strong>Escalation summary</strong>
+              </li>
+              <li className="preview-step">
+                <p className="step-label">Step 3 · Route by priority</p>
+                <div className="preview-outcomes">
+                  <div className="preview-node result-one">
+                    <span className="node-icon amber">
+                      <GitBranch size={18} aria-hidden="true" />
+                    </span>
+                    <div>
+                      <small>Urgent</small>
+                      <strong>Escalation summary</strong>
+                    </div>
+                  </div>
+                  <div className="preview-node result-two">
+                    <span className="node-icon blue">
+                      <Check size={19} aria-hidden="true" />
+                    </span>
+                    <div>
+                      <small>Standard</small>
+                      <strong>Suggested response</strong>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="preview-node result-two">
-                <span className="node-icon blue">
-                  <Check size={19} />
-                </span>
-                <div>
-                  <small>STANDARD</small>
-                  <strong>Suggested response</strong>
-                </div>
-              </div>
-            </div>
+              </li>
+            </ol>
             <div className="visual-footer">
               <span>
-                <ShieldCheck size={13} /> Policy-controlled tools
+                <ShieldCheck size={15} aria-hidden="true" /> Policy-controlled
+                tools
               </span>
-              <span>
-                60s timeout <span>·</span> $0.10 budget cap
-              </span>
+              <span>60s timeout · $0.10 budget cap</span>
             </div>
-            <p className="demo-caption">
+            <p className="demo-caption" id="product-demo-caption">
               Example configuration and outputs. This illustration does not run
               a model or take live actions.
             </p>
-          </div>
+          </section>
         </section>
         <section id="how-it-works" className="marketing-section">
           <div className="section-intro">
@@ -212,7 +217,7 @@ export default function Landing() {
             ].map((f) => (
               <article key={f.n}>
                 <div className="feature-top">
-                  <f.icon size={23} />
+                  <f.icon size={23} aria-hidden="true" />
                   <span>{f.n}</span>
                 </div>
                 <h3>{f.title}</h3>
@@ -223,7 +228,7 @@ export default function Landing() {
         </section>
         <section id="control" className="control-section">
           <div>
-            <Sparkles size={27} />
+            <Sparkles size={27} aria-hidden="true" />
             <h2>
               Know what a test will do.
               <br />
@@ -241,13 +246,14 @@ export default function Landing() {
             </p>
             <Button asChild variant="outline">
               <Link href="/register">
-                Build your first draft <ArrowRight size={16} />
+                Build your first draft{" "}
+                <ArrowRight size={16} aria-hidden="true" />
               </Link>
             </Button>
           </div>
           <div className="policy-card">
             <div className="row">
-              <ShieldCheck size={19} />
+              <ShieldCheck size={19} aria-hidden="true" />
               <strong>Sample agent policy</strong>
               <span className="sample-tag">CONFIGURATION EXAMPLE</span>
             </div>
@@ -270,7 +276,8 @@ export default function Landing() {
           <h2>What would you like to make easier?</h2>
           <Button asChild>
             <Link href="/register">
-              Get started with FlowForge <ArrowRight size={17} />
+              Get started with FlowForge{" "}
+              <ArrowRight size={17} aria-hidden="true" />
             </Link>
           </Button>
         </section>
@@ -279,7 +286,7 @@ export default function Landing() {
         <Brand />
         <span>Agents with purpose. Workflows with clarity.</span>
         <Link href="/app">
-          Open workspace <ArrowUpRight size={15} />
+          Open workspace <ArrowUpRight size={15} aria-hidden="true" />
         </Link>
       </footer>
     </div>
