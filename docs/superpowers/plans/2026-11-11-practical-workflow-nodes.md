@@ -34,11 +34,11 @@
 
 **Interfaces:** Add node type `switch`; config has `value: REFERENCE`, 1–8 `{id, label, value}` cases and exactly one implicit reserved default branch `default`. Edge `source_port` becomes a string bounded to 40 characters with validation by source-node type; preserve legacy port strings exactly. Case IDs match `[a-z][a-z0-9_-]{0,31}`, are unique and stable once created, and cannot equal `out`, `true`, `false`, or `default`. Case values are bounded JSON scalars (`string | number | boolean | null`) and must be unique under type-strict canonical JSON equality; labels are 1–40 characters. Validation requires exactly one outgoing edge for each case ID and one for `default`; condition nodes still require exactly one `true` and `false`; all outgoing edges from every other node use `out`, with the existing fan-out cardinality preserved. `list_deduplicate` config is defined in Task 2.
 
-- [ ] Add failing parse/validation tests for legacy condition edges, valid switch cases/default, malformed IDs, missing/duplicate/unknown ports, duplicate case values and node case limit.
-- [ ] Run focused tests and confirm intended failures.
-- [ ] Implement schema and source-port validation; require exactly one outgoing edge for each case ID and `default`, prohibit `out`/`true`/`false` on switch nodes.
-- [ ] Run focused tests and ensure existing graph fixtures pass unchanged.
-- [ ] Commit.
+- [x] Add parse/validation tests for legacy condition edges, valid switch cases/default, malformed IDs, missing/duplicate/unknown ports, duplicate case values, node case limit, stable IDs and bounded references. The resumed implementer did not independently observe the earlier RED run; see task report.
+- [x] Run focused tests; original implementer reported the intended RED phase, resumed implementer verified GREEN.
+- [x] Implement schema and source-port validation; require exactly one outgoing edge for each case ID and `default`, prohibit `out`/`true`/`false` on switch nodes.
+- [x] Run focused tests and ensure existing graph fixtures pass unchanged: 57 passed; full backend suite 406 passed; Ruff clean.
+- [x] Commit `78be9cf`; independent task review approved with no findings.
 
 ### Task 2: Runtime and preview behavior for Switch and Remove duplicates
 
