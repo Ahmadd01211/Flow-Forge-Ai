@@ -39,13 +39,15 @@
 
 **Interfaces:**
 - Input remains `POST /workspaces/{workspace_id}/templates/{template_key}/instantiate`.
-- Extend reviewed built-in agent recipe definitions with optional `starter_skills: list[str]` and user-facing `setup_steps`, `sample_input`, and `expected_result` metadata.
+- Extend reviewed built-in agent recipe definitions with optional `starter_skills: list[str]` and user-facing `setup_steps`, `sample_input`, and `expected_result` metadata. Use these exact mappings: `support-triage` → `plain-language`; `faq-answer` → `plain-language`, `summarise-sources`; new `customer-reply-draft` → `brand-voice`, `polite-refusal`; new `meeting-action-items` → `extract-tables`.
+- `customer-reply-draft` accepts `customer_message` and `brand_guidelines`; returns `draft_reply` and boolean `needs_human`; sample is a neutral shipping-status question with empty brand guidelines.
+- `meeting-action-items` accepts `notes`; returns `summary` and `action_items` array with `task`, `owner`, and `due_date` strings; sample is a short meeting note containing two assignments and one missing due date.
 - Response adds `skill_ids: list[uuid.UUID]` for created copies; preserve current `kind`, `id`, and `template_key` fields.
 - Skill copies are editable, unpublished workspace skills, created in the same database transaction as the agent and attached using `AgentConfig.skills` grants.
 
-- [ ] **Step 1: Write backend tests first** for an agent recipe with one starter skill, a recipe without skills, duplicate instantiation, missing starter rollback, and workflow instantiation preserving existing response fields.
+- [ ] **Step 1: Write backend tests first** for all four skill mappings and valid agent schemas, new recipe sample/expected-result metadata, duplicate instantiation, missing starter rollback, and workflow instantiation preserving existing response fields.
 - [ ] **Step 2: Run those tests and confirm the skill-copy/attachment and rollback assertions fail for the intended missing behavior.**
-- [ ] **Step 3: Add starter metadata to the reviewed static catalog and implement one transaction-scoped copy path.** Resolve starter keys from `STARTERS`; copy only name, description, instructions, examples and `starter_key`; never copy tool grants or credentials. Attach the resulting skill ID and display name to the agent config before saving.
+- [ ] **Step 3: Add the two reviewed agent recipes and skill metadata to the static catalog, then implement one transaction-scoped copy path.** Resolve starter keys from `STARTERS`; copy only name, description, instructions, examples and `starter_key`; never copy tool grants or credentials. Attach the resulting skill ID and display name to the agent config before saving. Expected-result copy explains that output is a draft for human review.
 - [ ] **Step 4: Re-run focused tests; verify copies are drafts, distinct per instantiation, attached, and rollback cleanly.**
 - [ ] **Step 5: Run relevant template/skill backend tests and commit.**
 
