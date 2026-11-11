@@ -33,11 +33,11 @@
 
 **Interfaces:** Keep existing Next.js route behavior and auth destinations. Public visitor primary action routes to registration; signed-in action follows current workspace/app routing if supported. Use existing palette tokens `--color-background`, `--color-foreground`, and `--color-primary` and existing Lucide icon imports.
 
-- [ ] Add tests for CTA destination, accurate feature labels and the absence of copy that promises unshipped live capabilities.
-- [ ] Run focused tests and record the failing behavior.
-- [ ] Redesign hero hierarchy around “describe a task → configure a recipe → test with clear controls”, with one primary CTA and a secondary product-demo jump link.
-- [ ] Rewrite feature sections around actual agent, workflow, template, integration and approval behavior; distinguish examples from live actions.
-- [ ] Verify tests and commit.
+- [x] Add rendered-page tests for CTA destination, accurate feature labels and the absence of copy that promises unshipped live capabilities.
+- [x] Run focused tests and record the failing behavior; implementer observed four initial failures, then expanded coverage to six route/copy tests.
+- [x] Redesign hero hierarchy around the describe-task → configure-recipe → test journey, with registration CTA and a secondary product-demo jump link.
+- [x] Rewrite feature sections around actual agent, workflow, template, integration, skill and approval behavior; distinguish examples from live actions.
+- [x] Verify tests and commit `f2aec8f`; independent review approved with no findings.
 
 ### Task 2: Responsive demo and accessibility polish
 
