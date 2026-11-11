@@ -763,7 +763,8 @@ function DeduplicateForm({ node, issues, onChange, context }: FormProps) {
       <Hint>
         Keeps the first occurrence in original order, comparing values and
         types. With an object field, missing fields stay separate and repeated
-        nulls collapse. Accepts up to 200 items and outputs{" "}
+        nulls collapse. Accepts JSON input within the 64 KiB size, nesting, and
+        complexity limits and outputs{" "}
         {"{ items, count, removed }"}.
       </Hint>
     </>
