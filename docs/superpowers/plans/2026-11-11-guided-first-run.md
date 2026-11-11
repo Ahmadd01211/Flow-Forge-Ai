@@ -62,29 +62,31 @@ Run from `frontend`: `npm run test -- src/features/workspace/task-start-model.te
 **Files:**
 - Create: `frontend/src/app/w/[workspaceId]/start/page.tsx`
 - Create: `frontend/src/features/workspace/task-start.tsx`
+- Create: `frontend/src/features/workspace/task-start.test.ts`
 - Modify: `frontend/src/app/w/[workspaceId]/overview/page.tsx`
 - Modify: `frontend/src/app/globals.css`
+- Create: `frontend/vitest.config.mts`
 - Test: `frontend/src/features/workspace/task-start-model.test.ts`
 
 **Interfaces:**
 - Consumes `startingChoices(base)` from Task 1.
 - Produces a server-rendered, keyboard-navigable page with three links: recommended support-ticket triage, blank agent, and blank workflow.
 
-- [ ] **Step 1: Add a failing test for the recommended-choice contract if the presentation model needs additional behavior**
+- [x] **Step 1: Write a failing server-rendered component test**
 
-The test must assert user-visible labels and href mapping through a pure model; do not snapshot component markup.
+Render `TaskStart` with a workspace ID and assert it produces the page heading and the three expected anchor destinations. Use `react-dom/server` with the real component; do not snapshot the entire markup.
 
-- [ ] **Step 2: Run the focused test and verify it fails for the missing behavior**
+- [x] **Step 2: Run the focused test and verify the expected missing-component failure**
 
-- [ ] **Step 3: Add the page and component**
+- [x] **Step 3: Add the page and component**
 
-Use semantic links and existing `PageHeader`, `Button`, and panel styles. Replace the setup hero's generic workflow CTA with a clear “Choose a task” link to `${base}/start`; retain the detailed setup checklist.
+Use semantic links and existing `PageHeader`, `Button`, and panel styles. Configure Vitest in an ESM TypeScript config to resolve the same `@/` source alias as the app so the real server-rendered component test runs without a config-loader warning. Replace the setup hero's generic workflow CTA with a clear “Choose a task” link to `${base}/start`; retain the detailed setup checklist.
 
-- [ ] **Step 4: Run focused tests, lint, and typecheck**
+- [x] **Step 4: Run both focused tests, lint, and typecheck**
 
-Run from `frontend`: `npm run test -- src/features/workspace/task-start-model.test.ts`, `npm run lint`, and `npm run typecheck`.
+Run from `frontend`: `npm run test -- src/features/workspace/task-start-model.test.ts src/features/workspace/task-start.test.ts`, `npm run lint`, and `npm run typecheck`.
 
-- [ ] **Step 5: Commit the task**
+- [x] **Step 5: Commit the task**
 
 ### Task 3: Focus the support-triage starter in the existing gallery
 

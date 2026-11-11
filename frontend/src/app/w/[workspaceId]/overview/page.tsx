@@ -55,7 +55,7 @@ export default async function Overview({
               <h2>One workflow.<br />A world of possibilities.</h2>
               <p>Connect a model, publish a workflow, and choose how it starts.<br />The checklist below follows your progress.</p>
               <Button asChild>
-                <Link href={`${base}/workflows`}>Open your workflows <ArrowRight size={16} /></Link>
+                <Link href={`${base}/start`}>Choose a task <ArrowRight size={16} /></Link>
               </Button>
             </div>
             <div className="overview-flow" aria-hidden="true">

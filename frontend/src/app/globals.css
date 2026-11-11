@@ -4451,6 +4451,14 @@ label select {
 
 /* Workspace overview dashboard */
 .overview-actions { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.task-start-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.task-start-card { display: flex; flex-direction: column; align-items: flex-start; padding: 22px; min-height: 220px; }
+.task-start-card h2 { margin: 0 0 10px; font-size: 18px; }
+.task-start-card p { flex: 1; margin: 0 0 22px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.task-start-card .button { gap: 8px; }
+.task-start-footnote { margin-top: 20px; color: var(--muted); font-size: 12px; }
+@media (max-width: 900px) { .task-start-grid { grid-template-columns: 1fr; } .task-start-card { min-height: 0; } }
 .overview-setup { margin-top: 22px; padding-bottom: 8px; }
 .overview-footnote { display: flex; align-items: center; gap: 6px; margin: 18px 0 4px; font-size: 11px; color: #8b95a8; }
 .overview-attention { margin-bottom: 22px; padding: 0 0 14px; border-color: #f0dcc0; }
