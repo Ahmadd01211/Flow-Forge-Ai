@@ -101,19 +101,19 @@ Run from `frontend`: `npm run test -- src/features/workspace/task-start-model.te
 - The templates page reads the `focus` search parameter and passes it to the gallery.
 - The gallery puts a matching available starter first and marks it as recommended. Existing preview and instantiate actions remain unchanged.
 
-- [ ] **Step 1: Add failing focused-template tests**
+- [x] **Step 1: Add failing focused-template tests**
 
 Cover matching, unknown, and absent focus. Verify unmatched templates keep their relative order.
 
-- [ ] **Step 2: Run the focused tests and verify the expected failure**
+- [x] **Step 2: Run the focused tests and verify the expected failure**
 
-- [ ] **Step 3: Implement search-parameter pass-through and recommendation treatment**
+- [x] **Step 3: Implement search-parameter pass-through and recommendation treatment**
 
 Keep the deep link presentation-only. Do not instantiate or mutate anything until the user selects the existing “Use template” action.
 
-- [ ] **Step 4: Re-run focused tests, lint, and typecheck**
+- [x] **Step 4: Re-run focused tests, lint, and typecheck**
 
-- [ ] **Step 5: Commit the task**
+- [x] **Step 5: Commit the task**
 
 ### Task 4: Add the manual first-run test guide
 

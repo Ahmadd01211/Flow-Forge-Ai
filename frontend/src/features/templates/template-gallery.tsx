@@ -14,6 +14,7 @@ import {
 import { Badge, ErrorNotice, PageHeader } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
+import { templatePresentation } from "@/features/workspace/task-start-model";
 
 export interface TemplateEntry {
   key: string;
@@ -30,10 +31,12 @@ export function TemplateGallery({
   workspaceId,
   templates,
   canCreate,
+  focus,
 }: {
   workspaceId: string;
   templates: TemplateEntry[];
   canCreate: boolean;
+  focus?: string;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(templates);
@@ -235,7 +238,7 @@ export function TemplateGallery({
         </section>
       )}
       <div className="template-grid">
-        {items.map((item) => (
+        {templatePresentation(items, focus).map(({ template: item, recommended }) => (
           <article key={item.key} className="panel template-card">
             <div className="row between">
               <span
@@ -247,7 +250,10 @@ export function TemplateGallery({
                   <GitBranch size={22} />
                 )}
               </span>
-              <Badge tone="purple">{item.category}</Badge>
+              <div className="row">
+                {recommended && <Badge tone="green">Recommended</Badge>}
+                <Badge tone="purple">{item.category}</Badge>
+              </div>
             </div>
             <h2>{item.name}</h2>
             <p>{item.description}</p>

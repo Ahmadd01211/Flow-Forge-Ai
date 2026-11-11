@@ -39,3 +39,17 @@ export function prioritizeTemplate<T extends { key: string }>(
 
   return [items[index], ...items.slice(0, index), ...items.slice(index + 1)];
 }
+
+export function templatePresentation<T extends { key: string }>(
+  items: T[],
+  focus?: string,
+): { template: T; recommended: boolean }[] {
+  const recommendedKey = focus && items.some((item) => item.key === focus)
+    ? focus
+    : undefined;
+
+  return prioritizeTemplate(items, focus).map((template) => ({
+    template,
+    recommended: template.key === recommendedKey,
+  }));
+}

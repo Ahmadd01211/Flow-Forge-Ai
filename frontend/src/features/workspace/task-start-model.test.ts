@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { prioritizeTemplate, startingChoices } from "./task-start-model";
+import {
+  prioritizeTemplate,
+  startingChoices,
+  templatePresentation,
+} from "./task-start-model";
 
 describe("guided task start", () => {
   it("routes each starting choice within the active workspace", () => {
@@ -34,5 +38,18 @@ describe("guided task start", () => {
 
     expect(prioritizeTemplate(templates)).toEqual(templates);
     expect(prioritizeTemplate(templates, "not-installed")).toEqual(templates);
+  });
+
+  it("marks only an available focused template as recommended", () => {
+    const templates = [{ key: "faq-answer" }, { key: "support-triage" }];
+
+    expect(templatePresentation(templates, "support-triage")).toEqual([
+      { template: { key: "support-triage" }, recommended: true },
+      { template: { key: "faq-answer" }, recommended: false },
+    ]);
+    expect(templatePresentation(templates, "not-installed")).toEqual([
+      { template: { key: "faq-answer" }, recommended: false },
+      { template: { key: "support-triage" }, recommended: false },
+    ]);
   });
 });
