@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import fail
-from app.modules.agents.models import AgentVersion
+from app.modules.agents.models import AgentVersion, standalone_versions
 from app.modules.audit.service import record
 from app.modules.deployments.models import Deployment
 from app.modules.executions.models import AgentRun
@@ -46,8 +46,16 @@ def _new_key() -> tuple[str, str, str]:
 
 
 def _agent_ready(
-    version: AgentVersion, connection: IntegrationConnection | None, installed: set[str]
+    version: AgentVersion, connection: IntegrationConnection | None, installed: set[str], db=None, raw_catalog="[]"
 ) -> bool:
+    from fastapi import HTTPException
+
+    from app.modules.agents.tool_grants import validate_grants
+    if version.config.get("mcp_tools") or version.config.get("http_tools") or version.config.get("workflow_tools"):
+        try:
+            validate_grants(db, version.workspace_id, version.config, raw_catalog)
+        except HTTPException:
+            return False
     return bool(
         (version.config.get("provider", "openai"), version.config.get("model_id")) in MODEL_PRICES
         and connection
@@ -61,7 +69,11 @@ def _agent_ready(
 def eligible(db: Session, workspace_id: uuid.UUID, mcp_catalog_json: str = "[]") -> dict:
     agents = db.scalars(
         select(AgentVersion)
-        .where(AgentVersion.workspace_id == workspace_id, AgentVersion.purpose == "published")
+        .where(
+            AgentVersion.workspace_id == workspace_id,
+            AgentVersion.purpose == "published",
+            standalone_versions(),
+        )
         .order_by(AgentVersion.created_at.desc())
         .limit(100)
     ).all()
@@ -86,12 +98,12 @@ def eligible(db: Session, workspace_id: uuid.UUID, mcp_catalog_json: str = "[]")
         "items": [
             {"kind": "agent", "version_id": row.id, "name": row.name, "number": row.number}
             for row in agents
-            if _agent_ready(row, connections.get(row.connection_id), installed)
+            if _agent_ready(row, connections.get(row.connection_id), installed, db, mcp_catalog_json)
         ]
         + [
             {"kind": "workflow", "version_id": row.id, "name": row.name, "number": row.number}
             for row in workflows
-            if validation(db, workspace_id, Graph.model_validate(row.graph), mcp_catalog_json)["publishable"]
+            if validation(db, workspace_id, Graph.model_validate(row.graph), mcp_catalog_json, root_workflow_id=row.workflow_id)["publishable"]
         ]
     }
 
@@ -113,6 +125,7 @@ def create(
                 AgentVersion.workspace_id == workspace_id,
                 AgentVersion.id == version_id,
                 AgentVersion.purpose == "published",
+                standalone_versions(),
             )
         )
         connection = (
@@ -132,7 +145,7 @@ def create(
                 )
             )
         )
-        if not version or not _agent_ready(version, connection, installed):
+        if not version or not _agent_ready(version, connection, installed, db, mcp_catalog_json):
             fail(422, "DEPLOYMENT_TARGET_INVALID", "Select an executable published agent version.")
     else:
         version = db.scalar(
@@ -208,15 +221,29 @@ def revoke(
             .where(
                 model.workspace_id == workspace_id,
                 model.deployment_id == row.id,
-                model.state.in_(["queued", "running"]),
+                model.state.in_(["queued", "running", "waiting"]),
             )
             .with_for_update()
         ).all()
         for run in runs:
             run.cancel_requested_at = now
-            if run.state == "queued":
+            if run.state == "waiting" and isinstance(run, AgentRun):
+                from app.modules.executions.agent_approvals import cancel_waiting
+
+                cancel_waiting(db, run, now)
+                run.state, run.error_code, run.finished_at, run.claim_token = (
+                    "cancelled", None, now, None
+                )
+            elif run.state == "queued":
+                if isinstance(run, AgentRun):
+                    from app.modules.executions.agent_approvals import cancel_waiting
+
+                    cancel_waiting(db, run, now)
                 run.state = "cancelled"
                 run.finished_at = now
+                if isinstance(run, WorkflowRun):
+                    from app.modules.workflows.checkpoints import settle_unfinished
+                    settle_unfinished(db, run, "RUN_CANCELLED")
         record(
             db,
             workspace_id,

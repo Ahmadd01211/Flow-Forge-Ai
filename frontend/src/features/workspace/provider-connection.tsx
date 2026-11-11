@@ -331,7 +331,11 @@ export function ProviderConnection({
                       ))
                     ) : (
                       <p className="integration-no-models">
-                        No models match that search.
+                        {!modelSearch.trim() &&
+                        models.length > 0 &&
+                        !showSetupOnly
+                          ? "No runnable models are available. Show models for setup only to review the full list."
+                          : "No models match that search."}
                       </p>
                     )}
                   </div>

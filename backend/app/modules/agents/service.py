@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import fail
 from app.core.json_contracts import example_errors, validate_user_schema
-from app.modules.agents.models import Agent, AgentVersion
+from app.modules.agents.models import Agent, AgentVersion, user_built
 from app.modules.agents.readiness import assess
 from app.modules.agents.schemas import (
     AgentConfig,
@@ -30,7 +30,9 @@ def get_agent(
     lock: bool = False,
     include_archived: bool = False,
 ) -> Agent:
-    query = select(Agent).where(Agent.workspace_id == workspace_id, Agent.id == agent_id)
+    query = select(Agent).where(
+        Agent.workspace_id == workspace_id, Agent.id == agent_id, user_built()
+    )
     if not include_archived:
         query = query.where(Agent.archived_at.is_(None))
     agent = db.scalar(query.with_for_update() if lock else query)
@@ -54,7 +56,11 @@ def serialize(agent: Agent) -> dict:
 def list_drafts(db: Session, workspace_id: uuid.UUID) -> dict:
     rows = db.scalars(
         select(Agent)
-        .where(Agent.workspace_id == workspace_id, Agent.archived_at.is_(None))
+        .where(
+            Agent.workspace_id == workspace_id,
+            Agent.archived_at.is_(None),
+            user_built(),
+        )
         .order_by(Agent.updated_at.desc(), Agent.id.desc())
         .limit(100)
     ).all()
@@ -175,6 +181,7 @@ def publish(
     agent_id: uuid.UUID,
     actor_id: uuid.UUID,
     body: SnapshotCreate,
+    raw_catalog: str = "[]",
 ) -> tuple[AgentVersion, bool]:
     agent = get_agent(db, workspace_id, agent_id, lock=True)
     check_revision(agent, body.expected_revision)
@@ -187,12 +194,45 @@ def publish(
     )
     if existing:
         return existing, False
-    config = AgentConfig.model_validate(agent.config).model_dump()
+    version = publish_config(db, workspace_id, agent, actor_id, agent.config, raw_catalog, body.change_summary)
+    db.commit()
+    return version, True
+
+
+def publish_config(
+    db: Session,
+    workspace_id: uuid.UUID,
+    agent: Agent,
+    actor_id: uuid.UUID,
+    raw_config: dict,
+    raw_catalog: str = "[]",
+    change_summary: str = "",
+) -> AgentVersion:
+    """Check, pin and freeze a config as the agent's published version at its current revision.
+
+    Does not commit, so callers such as workflow publishing stay in one transaction.
+    """
+    config = AgentConfig.model_validate(raw_config).model_dump()
+    if config.get("skills"):
+        from app.modules.skills.service import pin_for_agent
+        from app.providers.profiles import capability
+        # Pin skills first so the tools they bring go through the same checks and pins below.
+        config = pin_for_agent(db, workspace_id, config)
+        config["skill_loading"] = "on_demand" if capability(config["provider"], config["model_id"]).local_tools else "inline"
     connection = get_connection(db, workspace_id, config["provider"], lock=True)
-    checked = assess(db, workspace_id, config, connection)
+    checked = assess(db, workspace_id, config, connection, raw_catalog)
     if checked["errors"]:
         first = checked["errors"][0]
         fail(409 if first["code"] in {"PROVIDER_REQUIRED", "TOOL_NOT_APPROVED"} else 422, first["code"], first["message"])
+    from app.modules.mcp.agent_grants import pin
+    if config.get("mcp_tools"):
+        config["mcp_tools"] = pin(db, workspace_id, config["mcp_tools"], raw_catalog)
+    if config.get("http_tools"):
+        from app.modules.http_tools.service import pin as pin_http
+        config["http_tools"] = pin_http(db, workspace_id, config["http_tools"])
+    if config.get("workflow_tools"):
+        from app.modules.workflows.tools import pin as pin_workflows
+        config["workflow_tools"] = pin_workflows(db, workspace_id, config["workflow_tools"], raw_catalog)
     number = (
         db.scalar(select(func.max(AgentVersion.number)).where(AgentVersion.agent_id == agent.id))
         or 0
@@ -210,7 +250,7 @@ def publish(
         description=agent.description,
         config=deepcopy(config),
         config_hash=config_hash(config),
-        change_summary=body.change_summary.strip(),
+        change_summary=change_summary.strip(),
         created_by=actor_id,
     )
     db.add(version)
@@ -230,8 +270,7 @@ def publish(
             "model_id": config["model_id"],
         },
     )
-    db.commit()
-    return version, True
+    return version
 
 
 def get_version(

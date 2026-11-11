@@ -5,6 +5,7 @@ import { Code2, LoaderCircle, ShieldCheck } from "lucide-react";
 import { Badge, ErrorNotice, PageHeader } from "@/components/shared/ui";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
+import { HttpToolRegistry, type HttpTool } from "./http-tool-registry";
 
 export interface ToolEntry {
   key: string;
@@ -18,15 +19,18 @@ export interface ToolEntry {
 const examples: Record<string, string> = {
   "json.extract": '{"document":{"customer":{"email":"alex@example.com"}},"pointer":"/customer/email"}',
   "text.replace": '{"text":"Hello world","find":"world","replacement":"FlowForge"}',
+  "demo.order_lookup": '{"order_id":"A-17"}',
 };
 
-export function ToolRegistry({ workspaceId, initialTools, canManage, canTest }: {
+export function ToolRegistry({ workspaceId, initialTools, initialHttpTools, canManage, canTest }: {
   workspaceId: string;
   initialTools: ToolEntry[];
+  initialHttpTools: HttpTool[];
   canManage: boolean;
   canTest: boolean;
 }) {
   const [tools, setTools] = useState(initialTools);
+  const [section, setSection] = useState<"api" | "local">("api");
   const [selected, setSelected] = useState(initialTools[0]?.key || "");
   const [input, setInput] = useState(examples[selected] || "{}");
   const [output, setOutput] = useState("");
@@ -67,7 +71,9 @@ export function ToolRegistry({ workspaceId, initialTools, canManage, canTest }: 
 
   return <>
     <PageHeader eyebrow="REVIEWED CAPABILITIES" title="Tool Registry" description="Approve bounded tools for this workspace and test them before using them in an agent or workflow." />
-    <div className="tool-registry-layout">
+    <div className="registry-tabs" aria-label="Tool categories"><Button variant={section === "api" ? "default" : "ghost"} aria-pressed={section === "api"} onClick={() => setSection("api")}>HTTP API tools</Button><Button variant={section === "local" ? "default" : "ghost"} aria-pressed={section === "local"} onClick={() => setSection("local")}>Local utilities</Button></div>
+    <div hidden={section !== "api"}><HttpToolRegistry workspaceId={workspaceId} initialTools={initialHttpTools} canManage={canManage} canTest={canTest} /></div>
+    <div hidden={section !== "local"} className="registry-panel"><div className="tool-registry-layout">
       <section className="panel tool-registry-list" aria-label="Available tools">
         <div className="tool-section-heading"><h2>Available tools</h2><Badge tone="purple">{tools.length}</Badge></div>
         {tools.map((item) => <button type="button" key={item.key} className={`tool-row ${selected === item.key ? "selected" : ""}`} onClick={() => { setSelected(item.key); setInput(examples[item.key] || "{}"); setOutput(""); setError(""); }}>
@@ -89,6 +95,6 @@ export function ToolRegistry({ workspaceId, initialTools, canManage, canTest }: 
           {output && <><label htmlFor="tool-output">Output JSON</label><pre id="tool-output" className="tool-output">{output}</pre></>}
         </div>
       </section>}
-    </div>
+    </div></div>
   </>;
 }

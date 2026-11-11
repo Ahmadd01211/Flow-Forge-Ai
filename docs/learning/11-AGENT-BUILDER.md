@@ -16,7 +16,7 @@ The checklist and actual publication share one assessment function. This checks 
 
 New configurations include `limits.max_output_tokens`, from 16 to 4096, default 4096. It is a ceiling per model call. Both standalone runs and workflow agent steps take the smaller of this ceiling, the platform cap and the budget-derived allowance. The local-tool loop further reduces the allowance as it spends the run budget. Providers may include reasoning tokens in that allowance. Token limits and budget estimates do not guarantee the provider invoice.
 
-The execution timeout is the run deadline including queue time. The current standalone model execution has a separate maximum of 30 seconds (25 seconds for a workflow agent step); the checklist explains this distinction when the configured deadline is longer. Retries, general checkpoints, provider tool parity and orchestration remain phases 5–7.
+The execution timeout is the run deadline including queue time. The current standalone model execution has a separate maximum of 30 seconds (25 seconds for a workflow agent step); the checklist explains this distinction when the configured deadline is longer. Provider tool parity is delivered in [phase 5](12-AGENT-MCP-AND-REGRESSIONS.md). Bounded DAGs, step checkpoints, safe local retries and workflow debugging are now delivered; see [workflow mappings](15-WORKFLOW-GRAPHS-AND-MAPPINGS.md) and [durable execution](16-WORKFLOW-CHECKPOINTS-AND-DEBUGGER.md). Loops, subworkflows and long-lived approval waits remain expansion work.
 
 ## Why versions stay immutable
 

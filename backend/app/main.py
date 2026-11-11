@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 import uuid
 
@@ -10,22 +11,35 @@ from fastapi.responses import JSONResponse
 from redis import Redis
 from sqlalchemy import text
 
+from app import models  # noqa: F401 -- API and worker share the ORM composition root
 from app.core.config import Settings
 from app.core.db import make_sessions
+from app.modules.agents.evaluations import router as agent_evaluations
 from app.modules.agents.router import router as agents
+from app.modules.agents.workbench import router as agent_workbench
+from app.modules.audit.router import router as activity
+from app.modules.automations.router import router as automations
+from app.modules.automations.router import webhooks
 from app.modules.deployments.router import invoke as hosted_invocation
 from app.modules.deployments.router import manage as deployments
 from app.modules.executions.router import router as executions
+from app.modules.http_tools.router import router as http_tools
 from app.modules.identity.router import router as identity
 from app.modules.integrations.router import router as integrations
 from app.modules.mcp.router import router as mcp
+from app.modules.skills.router import router as skills
 from app.modules.templates.router import router as templates
 from app.modules.tools.router import router as tools
 from app.modules.workflows.router import router as workflows
 from app.modules.workflows.router import run_router as workflow_runs
 from app.modules.workspaces.router import router as workspaces
+from app.modules.workspaces.usage_router import router as usage
 
 log = logging.getLogger("flowforge")
+MAX_BODY_BYTES = 600000
+# Matches infra/nginx.conf: node tests carry the draft graph plus sample input and step outputs.
+NODE_TEST_PATH = re.compile(r"^/api/v1/workspaces/[^/]+/workflows/[^/]+/nodes/[^/]+/test$")
+NODE_TEST_MAX_BODY_BYTES = 921600
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
@@ -43,7 +57,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_context(request: Request, call_next):
         request.state.request_id = str(uuid.uuid4())
         start = time.monotonic()
-        if int(request.headers.get("content-length", "0") or "0") > 600000:
+        limit = NODE_TEST_MAX_BODY_BYTES if NODE_TEST_PATH.match(request.url.path) else MAX_BODY_BYTES
+        if int(request.headers.get("content-length", "0") or "0") > limit:
             return JSONResponse(
                 status_code=413,
                 content={
@@ -133,18 +148,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 installed = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
                 if installed != ScriptDirectory("migrations").get_current_head():
                     raise RuntimeError("Schema revision mismatch")
+            app.state.redis.ping()
         except Exception:
             raise HTTPException(
-                503, {"code": "NOT_READY", "message": "Database or migrations unavailable."}
+                503, {"code": "NOT_READY", "message": "A required service or migration is unavailable."}
             ) from None
         return {"status": "ready"}
 
     for router in [
         identity,
         workspaces,
+        activity,
+        usage,
+        # Before `agents`, so /agents/library is not read as an agent ID.
+        agent_workbench,
         agents,
+        agent_evaluations,
+        skills,
+        automations,
+        webhooks,
         integrations,
         tools,
+        http_tools,
         mcp,
         workflows,
         workflow_runs,

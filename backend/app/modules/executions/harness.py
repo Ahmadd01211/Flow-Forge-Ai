@@ -4,6 +4,7 @@ Callers hold a row lock on AgentRun before appending. Inputs, outputs, credentia
 model reasoning, and tool arguments never enter this event table.
 """
 
+import json
 import uuid
 
 from sqlalchemy import func, select
@@ -22,13 +23,22 @@ def append_event(
     input_tokens: int | None = None,
     output_tokens: int | None = None,
     error_code: str | None = None,
+    detail: dict | None = None,
+    master: bytes | None = None,
 ) -> None:
     sequence = (
         db.scalar(select(func.max(RunEvent.sequence)).where(RunEvent.run_id == run.id)) or 0
     ) + 1
+    event_id = uuid.uuid4()
+    nonce = ciphertext = None
+    if detail is not None and master is not None:
+        from app.core.credentials import encrypt_secret
+        nonce, ciphertext = encrypt_secret(master, run.workspace_id, event_id, 1, json.dumps(detail, ensure_ascii=False))
     db.add(
         RunEvent(
-            id=uuid.uuid4(),
+            id=event_id,
+            nonce=nonce,
+            ciphertext=ciphertext,
             workspace_id=run.workspace_id,
             run_id=run.id,
             sequence=sequence,

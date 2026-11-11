@@ -31,7 +31,33 @@ KEYWORDS = {
     "minProperties",
     "maxProperties",
 }
+# Remote MCP tools may also offer alternatives; every provider adapter forwards them unchanged.
+TOOL_KEYWORDS = KEYWORDS | {"anyOf", "oneOf"}
+# Documentation-only keywords removed from remote tool schemas before validation. `pattern` is
+# removed too: a remote regex would run in our validator, while the server still enforces it.
+TOOL_ANNOTATIONS = {
+    "default", "examples", "format", "pattern", "$comment", "$id", "deprecated",
+    "readOnly", "writeOnly", "contentMediaType", "contentEncoding",
+}
 UNSAFE_NAMES = {"__proto__", "prototype", "constructor"}
+
+
+def sanitize_tool_schema(schema: object) -> object:
+    """Drop annotation keywords; property names and enum/const data are left untouched."""
+    if not isinstance(schema, dict):
+        return schema
+    result = {}
+    for key, value in schema.items():
+        if key in TOOL_ANNOTATIONS:
+            continue
+        if key == "properties" and isinstance(value, dict):
+            value = {name: sanitize_tool_schema(child) for name, child in value.items()}
+        elif key in ("items", "additionalProperties"):
+            value = sanitize_tool_schema(value)
+        elif key in ("anyOf", "oneOf") and isinstance(value, list):
+            value = [sanitize_tool_schema(child) for child in value]
+        result[key] = value
+    return result
 
 
 def bounded_json(value: object, *, max_bytes: int = 262144, max_depth: int = 16) -> None:
@@ -58,7 +84,9 @@ def bounded_json(value: object, *, max_bytes: int = 262144, max_depth: int = 16)
         fail(422, "JSON_TOO_LARGE", "JSON exceeds the supported size limit.")
 
 
-def validate_user_schema(schema: dict) -> None:
+def validate_user_schema(schema: dict, *, tool: bool = False) -> None:
+    """Validate a supported JSON Schema subset; ``tool`` also accepts anyOf/oneOf alternatives."""
+    keywords = TOOL_KEYWORDS if tool else KEYWORDS
     bounded_json(schema, max_bytes=65536, max_depth=24)
     if schema.get("type") != "object":
         fail(422, "SCHEMA_OBJECT_REQUIRED", "Input and output must use object schemas.")
@@ -68,7 +96,7 @@ def validate_user_schema(schema: dict) -> None:
             fail(422, "SCHEMA_TOO_DEEP", "Schemas support at most eight nested schema levels.")
         if not isinstance(part, dict):
             fail(422, "SCHEMA_INVALID", "Each nested schema must be an object.")
-        if set(part) - KEYWORDS:
+        if set(part) - keywords:
             fail(
                 422,
                 "SCHEMA_UNSUPPORTED",
@@ -86,6 +114,13 @@ def validate_user_schema(schema: dict) -> None:
                 walk(child, depth + 1)
         if "items" in part:
             walk(part["items"], depth + 1)
+        for key in ("anyOf", "oneOf"):
+            if key in part:
+                options = part[key]
+                if not isinstance(options, list) or not 1 <= len(options) <= 16:
+                    fail(422, "SCHEMA_INVALID", "Alternatives must list one to sixteen schemas.")
+                for option in options:
+                    walk(option, depth + 1)
         if "additionalProperties" in part and not isinstance(part["additionalProperties"], bool):
             walk(part["additionalProperties"], depth + 1)
         required = part.get("required", [])

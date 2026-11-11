@@ -1,38 +1,47 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Activity,
   ArrowLeft,
+  BookOpen,
   Bot,
+  Brain,
   Check,
-  Code2,
-  FileText,
-  Gauge,
+  Cpu,
+  FlaskConical,
+  History,
   LoaderCircle,
+  Rocket,
   Save,
+  Send,
+  Shapes,
   ShieldCheck,
   Sparkles,
-  History,
-  FlaskConical,
+  Wrench,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge, ErrorNotice } from "@/components/shared/ui";
+import { ErrorNotice } from "@/components/shared/ui";
+import { SaveTemplate } from "@/features/templates/save-template";
+import { McpConnections, type McpListing } from "@/features/workspace/mcp-connections";
 import { api } from "@/lib/api/client";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
-import type {
-  Agent,
-  AgentConfig,
-  AgentVersion,
-  Connection,
-  VersionList,
-} from "@/lib/api/types";
-import { VersionHistory } from "./version-history";
+import type { Agent, AgentConfig, AgentVersion, Connection, VersionList } from "@/lib/api/types";
 import type { ToolEntry } from "@/features/tools/tool-registry";
-import { isRunnableModel } from "./runnable-models";
-import { agentStarters } from "./agent-starters";
-import { SchemaEditor } from "./schema-editor";
+import type { HttpTool } from "@/features/tools/http-tool-registry";
 import type { components } from "@/lib/api/generated";
+import { VersionHistory } from "./version-history";
+import { agentStarters } from "./agent-starters";
+import type { McpServerOption } from "./model-tools";
+import { Block, BrainBlock, GuardrailsBlock, IoBlock, MemoryBlock, PersonaBlock, ReadinessMeter, SkillsBlock } from "./builder-blocks";
+import type { SkillItem } from "./skills-model";
+import { IO_PRESETS, SECTION_BLOCK, blockReadiness, presetOf, toolCount, type BlockId } from "./builder-model";
+import { ToolShelf } from "./tool-shelf";
+import { TryPanel } from "./try-panel";
+import { UsePanel } from "./use-panel";
+import { PerformanceBlock } from "./performance-block";
 
 const defaultConfig: AgentConfig = {
   schema_version: 1,
@@ -40,18 +49,14 @@ const defaultConfig: AgentConfig = {
   provider: "openai",
   model_id: "",
   tool_keys: [],
-  input_schema: {
-    type: "object",
-    properties: { ticket: { type: "string" } },
-    required: ["ticket"],
-    additionalProperties: false,
-  },
-  output_schema: {
-    type: "object",
-    properties: { priority: { type: "string", enum: ["urgent", "normal"] } },
-    required: ["priority"],
-    additionalProperties: false,
-  },
+  mcp_tools: [],
+  http_tools: [],
+  memory: null,
+  workflow_tools: [],
+  skills: [],
+  skill_loading: "on_demand",
+  input_schema: IO_PRESETS[0].input as AgentConfig["input_schema"],
+  output_schema: IO_PRESETS[0].output as AgentConfig["output_schema"],
   limits: {
     max_iterations: 8,
     timeout_seconds: 60,
@@ -60,809 +65,287 @@ const defaultConfig: AgentConfig = {
     max_output_tokens: 4096,
   },
 };
-const tabs = [
-  { id: "instructions", label: "Instructions", icon: FileText },
-  { id: "model", label: "Model & tools", icon: Sparkles },
-  { id: "schemas", label: "Schemas", icon: Code2 },
-  { id: "limits", label: "Limits", icon: Gauge },
-  { id: "versions", label: "History", icon: History },
-];
+
+const PROVIDER_LABEL: Record<string, string> = { openai: "OpenAI", anthropic: "Claude", gemini: "Gemini", openrouter: "OpenRouter", deepseek: "DeepSeek" };
+
+function parseSchema(text: string): AgentConfig["input_schema"] | null {
+  try {
+    const value = JSON.parse(text);
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AgentEditor({
   agent,
   workspaceId,
   versions,
-  initialTab = "instructions",
   canEdit = true,
+  canManage = false,
   connections = [],
   tools = [],
+  mcpServers = [],
+  mcpListing,
+  httpTools = [],
+  skills = [],
 }: {
   agent?: Agent;
   workspaceId: string;
   versions?: VersionList;
   initialTab?: string;
   canEdit?: boolean;
+  canManage?: boolean;
   connections?: Connection[];
   tools?: ToolEntry[];
+  httpTools?: HttpTool[];
+  mcpServers?: McpServerOption[];
+  mcpListing?: McpListing;
+  skills?: SkillItem[];
 }) {
-  const preferredConnection = connections.find(
-    (item) => item.state === "active" && item.default_model_id,
-  );
-  const router = useRouter(),
-    [name, setName] = useState(agent?.name || ""),
+  const router = useRouter();
+  const preferred = connections.find((item) => item.state === "active" && item.default_model_id);
+  const initial = agent?.config || (preferred ? { ...defaultConfig, provider: preferred.provider, model_id: preferred.default_model_id || "" } : defaultConfig);
+  const [name, setName] = useState(agent?.name || ""),
     [description, setDescription] = useState(agent?.description || ""),
-    [config, setConfig] = useState<AgentConfig>(
-      agent?.config ||
-        (preferredConnection
-          ? {
-              ...defaultConfig,
-              provider: preferredConnection.provider,
-              model_id: preferredConnection.default_model_id || "",
-            }
-          : defaultConfig),
-    ),
-    [tab, setTab] = useState(initialTab),
+    [config, setConfig] = useState<AgentConfig>(initial),
+    [input, setInput] = useState(JSON.stringify(initial.input_schema, null, 2)),
+    [output, setOutput] = useState(JSON.stringify(initial.output_schema, null, 2)),
     [revision, setRevision] = useState(agent?.revision || 1),
-    [busy, setBusy] = useState(false),
+    [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
-    [saved, setSaved] = useState(false),
-    [snapshotBusy, setSnapshotBusy] = useState(false),
-    [publishBusy, setPublishBusy] = useState(false),
-    [summary, setSummary] = useState("");
-  const connection = connections.find(
-    (item) => item.provider === config.provider,
-  );
-  const [input, setInput] = useState(
-      JSON.stringify(config.input_schema, null, 2),
-    ),
-    [output, setOutput] = useState(
-      JSON.stringify(config.output_schema, null, 2),
-    );
+    [summary, setSummary] = useState(""),
+    [publishOpen, setPublishOpen] = useState(false),
+    [drawer, setDrawer] = useState(false),
+    [readiness, setReadiness] = useState<components["schemas"]["ReadinessRead"] | null>(null);
   const current = JSON.stringify({ name, description, config, input, output });
-  const [readiness, setReadiness] = useState<
-    components["schemas"]["ReadinessRead"] | null
-  >(null);
-  const [checking, setChecking] = useState(false);
   const [baseline, setBaseline] = useState(current);
-  useUnsavedChanges(current !== baseline);
-  async function checkReadiness() {
-    if (!agent || current !== baseline) return;
-    setChecking(true);
-    setError("");
-    try {
-      setReadiness(
-        await api(`/workspaces/${workspaceId}/agents/${agent.id}/readiness`),
-      );
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not check publication readiness.",
-      );
-    } finally {
-      setChecking(false);
-    }
+  const dirty = current !== baseline;
+  useUnsavedChanges(dirty);
+
+  const inputSchema = parseSchema(input), outputSchema = parseSchema(output);
+  const schemasValid = !!inputSchema && !!outputSchema;
+  const draft: AgentConfig = schemasValid ? { ...config, input_schema: inputSchema, output_schema: outputSchema } : config;
+  const connection = connections.find((item) => item.provider === config.provider);
+  const ready = blockReadiness(draft, connection, schemasValid);
+  const published = versions?.items.find((item) => item.purpose === "published") as AgentVersion | undefined;
+  const status = !published ? { label: "Draft", tone: "draft" } : published.source_revision === revision && !dirty ? { label: `Published v${published.number}`, tone: "live" } : { label: `Unpublished changes · live v${published.number}`, tone: "changed" };
+
+  const firstOpen = (Object.keys(ready) as BlockId[]).find((id) => !ready[id]) ?? (agent ? null : "persona");
+  const [open, setOpen] = useState<Set<string>>(() => new Set(firstOpen ? [firstOpen] : []));
+  function toggle(id: string) {
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
+  function reveal(id: string) {
+    setOpen((current) => new Set(current).add(id));
+    setTimeout(() => document.getElementById(`block-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+
+  // The server checklist is only meaningful for saved settings; refresh it whenever publish opens.
+  useEffect(() => {
+    if (!publishOpen || !agent || dirty) return;
+    let cancelled = false;
+    api<components["schemas"]["ReadinessRead"]>(`/workspaces/${workspaceId}/agents/${agent.id}/readiness`)
+      .then((result) => { if (!cancelled) setReadiness(result); })
+      .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not check readiness."); });
+    return () => { cancelled = true; };
+  }, [publishOpen, agent, dirty, workspaceId, revision]);
+
   function applyStarter(starter: (typeof agentStarters)[number]) {
     setName(starter.name);
     setDescription(starter.description);
-    setConfig((previous) => ({
-      ...previous,
-      instructions: starter.instructions,
-      input_schema: starter.inputSchema,
-      output_schema: starter.outputSchema,
-    }));
+    setConfig((previous) => ({ ...previous, instructions: starter.instructions, ...(starter.memory ? { memory: starter.memory } : {}) }));
     setInput(JSON.stringify(starter.inputSchema, null, 2));
     setOutput(JSON.stringify(starter.outputSchema, null, 2));
-    setTab("instructions");
-    setSaved(false);
   }
-  async function createSnapshot() {
-    if (!agent || current !== baseline) return;
-    setSnapshotBusy(true);
+
+  async function save(): Promise<boolean> {
+    if (!schemasValid) return false;
+    setBusy("save");
     setError("");
     try {
-      await api<AgentVersion>(
-        `/workspaces/${workspaceId}/agents/${agent.id}/test-snapshots`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            expected_revision: revision,
-            change_summary: summary,
-          }),
-        },
-      );
-      setTab("versions");
-      setSummary("");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Snapshot creation failed.");
-    } finally {
-      setSnapshotBusy(false);
-    }
-  }
-  async function publish() {
-    if (!agent || current !== baseline) return;
-    setPublishBusy(true);
-    setError("");
-    try {
-      await api<AgentVersion>(
-        `/workspaces/${workspaceId}/agents/${agent.id}/versions`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            expected_revision: revision,
-            change_summary: summary,
-          }),
-        },
-      );
-      setTab("versions");
-      setSummary("");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Publication failed.");
-    } finally {
-      setPublishBusy(false);
-    }
-  }
-  function limit(key: keyof AgentConfig["limits"], value: string) {
-    setConfig({
-      ...config,
-      limits: {
-        ...config.limits,
-        [key]: key === "max_cost_usd" ? value : Number(value),
-      },
-    });
-    setSaved(false);
-  }
-  async function save() {
-    setBusy(true);
-    setError("");
-    try {
-      const updated = {
-        ...config,
-        input_schema: JSON.parse(input),
-        output_schema: JSON.parse(output),
-      };
-      const result = await api<Agent>(
-        `/workspaces/${workspaceId}/agents${agent ? `/${agent.id}` : ""}`,
-        {
-          method: agent ? "PATCH" : "POST",
-          body: JSON.stringify({
-            name,
-            description,
-            config: updated,
-            ...(agent ? { expected_revision: revision } : {}),
-          }),
-        },
-      );
+      const result = await api<Agent>(`/workspaces/${workspaceId}/agents${agent ? `/${agent.id}` : ""}`, {
+        method: agent ? "PATCH" : "POST",
+        body: JSON.stringify({ name, description, config: draft, ...(agent ? { expected_revision: revision } : {}) }),
+      });
       setConfig(result.config);
       setRevision(result.revision);
-      setSaved(true);
       setReadiness(null);
-      setBaseline(
-        JSON.stringify({
-          name,
-          description,
-          config: result.config,
-          input,
-          output,
-        }),
-      );
+      setBaseline(JSON.stringify({ name, description, config: result.config, input, output }));
       if (!agent) router.replace(`/w/${workspaceId}/agents/${result.id}`);
       else router.refresh();
-    } catch (e) {
-      setError(
-        e instanceof SyntaxError
-          ? "Input and output schemas must contain valid JSON."
-          : e instanceof Error
-            ? e.message
-            : "Could not save this agent.",
-      );
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save this agent.");
+      return false;
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   }
+
+  async function freeze(kind: "publish" | "snapshot") {
+    if (!agent || dirty) return;
+    setBusy(kind);
+    setError("");
+    try {
+      await api<AgentVersion>(`/workspaces/${workspaceId}/agents/${agent.id}/${kind === "publish" ? "versions" : "test-snapshots"}`, {
+        method: "POST",
+        body: JSON.stringify({ expected_revision: revision, change_summary: summary }),
+      });
+      setSummary("");
+      setPublishOpen(false);
+      reveal(kind === "publish" ? "use" : "history");
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : kind === "publish" ? "Publication failed." : "Snapshot failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const preset = IO_PRESETS.find((item) => item.id === presetOf(input, output));
+  const firstLine = config.instructions.split("\n").find((line) => line.trim());
   return (
-    <>
+    <div className="agent-builder">
+      <div className="builder-top">
+        <Link href={`/w/${workspaceId}/agents`} className="icon-button" aria-label="Back to agents">
+          <ArrowLeft size={19} />
+        </Link>
+        <span className="builder-avatar" aria-hidden="true"><Bot size={22} /></span>
+        <div className="builder-identity">
+          <input className="builder-name" aria-label="Agent name" value={name} maxLength={100} placeholder="Name your agent" disabled={!canEdit} onChange={(event) => setName(event.target.value)} />
+          <span className="row">
+            <span className={`builder-status ${status.tone}`}>{status.label}</span>
+            <small className="muted">{dirty ? "Unsaved changes" : agent ? `Saved · revision ${revision}` : "Not saved yet"}</small>
+          </span>
+        </div>
+        <div className="row builder-actions">
+          {agent && <SaveTemplate workspaceId={workspaceId} sourceId={agent.id} kind="agent" revision={revision} name={name} description={description} disabled={!!busy || !canEdit || dirty} />}
+          <Button variant="outline" onClick={() => setPublishOpen(!publishOpen)} disabled={!agent || !canEdit} title={agent ? "Freeze these settings as a version" : "Save the agent first"}>
+            <Rocket size={15} /> Publish
+          </Button>
+          <Button onClick={save} disabled={!!busy || !name.trim() || !canEdit || !schemasValid || (!!agent && !dirty)}>
+            {busy === "save" ? <LoaderCircle size={15} className="spin" /> : !dirty && agent ? <Check size={15} /> : <Save size={15} />}
+            {!dirty && agent ? "Saved" : "Save"}
+          </Button>
+        </div>
+      </div>
+      {publishOpen && agent && (
+        <section className="publish-bar" aria-label="Publish">
+          {dirty ? (
+            <div className="row">
+              <span>Save your changes first, then publish.</span>
+              <Button size="sm" onClick={save} disabled={!!busy || !schemasValid}><Save size={14} /> Save now</Button>
+            </div>
+          ) : (
+            <>
+              {readiness === null ? (
+                <span className="muted"><LoaderCircle size={13} className="spin" /> Checking provider, tools and contracts…</span>
+              ) : readiness.errors.length ? (
+                <ul className="publish-issues">
+                  {readiness.errors.map((issue) => (
+                    <li key={issue.code + issue.message}>
+                      <span>{issue.message}</span>
+                      <button type="button" className="text-link" onClick={() => reveal(SECTION_BLOCK[issue.section] ?? "persona")}>Fix it</button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="publish-ok"><ShieldCheck size={15} /> {readiness.runnable ? "Everything checks out. Ready to publish." : "Publishable, but this model is setup only and can't run yet."}</span>
+              )}
+              <div className="row">
+                <input aria-label="Version note" placeholder="What changed? (optional)" value={summary} maxLength={1000} onChange={(event) => setSummary(event.target.value)} />
+                <Button size="sm" variant="outline" disabled={!!busy || !config.instructions.trim()} onClick={() => freeze("snapshot")} title="Freeze without the provider check, for contract tests">
+                  {busy === "snapshot" ? <LoaderCircle size={14} className="spin" /> : <FlaskConical size={14} />} Test snapshot
+                </Button>
+                <Button size="sm" disabled={!!busy || !readiness || readiness.errors.length > 0} onClick={() => freeze("publish")}>
+                  {busy === "publish" ? <LoaderCircle size={14} className="spin" /> : <Send size={14} />} Publish version
+                </Button>
+              </div>
+            </>
+          )}
+          <button type="button" className="icon-button publish-close" aria-label="Close" onClick={() => setPublishOpen(false)}><X size={15} /></button>
+        </section>
+      )}
       {!agent && (
-        <section className="agent-starters" aria-label="Agent quick starts">
+        <section className="builder-starters" aria-label="Agent quick starts">
+          <strong>Start from a shape</strong>
           <div>
-            <strong>Start with a working shape</strong>
-            <p>
-              Choose a starting configuration, then edit every instruction and
-              field.
-            </p>
-          </div>
-          <div className="agent-starter-options">
             {agentStarters.map((starter) => (
-              <button
-                key={starter.id}
-                type="button"
-                onClick={() => applyStarter(starter)}
-                disabled={!canEdit}
-              >
-                <Bot size={17} />
-                <span>
-                  <strong>{starter.name}</strong>
-                  <small>{starter.description}</small>
-                </span>
-                <ArrowLeft size={14} className="starter-arrow" />
+              <button key={starter.id} type="button" disabled={!canEdit} onClick={() => applyStarter(starter)}>
+                <span aria-hidden="true">{starter.emoji}</span>
+                <span><strong>{starter.name}</strong><small>{starter.description}</small></span>
               </button>
             ))}
           </div>
         </section>
       )}
-      <div className="editor-heading">
-        <div className="row">
-          <Link
-            href={`/w/${workspaceId}/agents`}
-            className="icon-button"
-            aria-label="Back to agents"
-          >
-            <ArrowLeft size={19} />
-          </Link>
-          <div>
-            <div className="row">
-              <h1>{agent ? "Agent configuration" : "Create an agent"}</h1>
-              <Badge>Draft · r{revision}</Badge>
-            </div>
-            <p>Define a clear purpose. Give it clear boundaries.</p>
-          </div>
-        </div>
-        <div className="row agent-editor-actions">
-          <Button
-            variant="outline"
-            onClick={publish}
-            disabled={
-              !agent ||
-              busy ||
-              snapshotBusy ||
-              publishBusy ||
-              current !== baseline ||
-              !config.instructions.trim() ||
-              !connection?.verified_models.includes(config.model_id) ||
-              connection?.state !== "active" ||
-              !canEdit
-            }
-            title="Freeze a publishable definition after provider and schema checks. Supported models can then be run from History."
-          >
-            {publishBusy ? (
-              <LoaderCircle size={15} className="spin" />
-            ) : (
-              <ShieldCheck size={15} />
-            )}
-            Publish version
-          </Button>
-          <Button
-            variant="outline"
-            onClick={createSnapshot}
-            disabled={
-              !agent ||
-              busy ||
-              snapshotBusy ||
-              publishBusy ||
-              current !== baseline ||
-              !config.instructions.trim() ||
-              !canEdit
-            }
-            title={
-              current !== baseline
-                ? "Save your changes before creating a snapshot."
-                : !agent
-                  ? "Save the agent first."
-                  : "Freeze the saved configuration without a model call."
-            }
-          >
-            {snapshotBusy ? (
-              <LoaderCircle size={15} className="spin" />
-            ) : (
-              <FlaskConical size={15} />
-            )}
-            Create snapshot
-          </Button>
-          <Button onClick={save} disabled={busy || !name.trim() || !canEdit}>
-            {busy ? (
-              <LoaderCircle size={16} className="spin" />
-            ) : saved && current === baseline ? (
-              <Check size={16} />
-            ) : (
-              <Save size={16} />
-            )}{" "}
-            {saved && current === baseline ? "Saved" : "Save draft"}
-          </Button>
-        </div>
-      </div>
       {error && <ErrorNotice message={error} />}
-      <div className="agent-editor-grid">
-        <div>
-          <section className="panel form-panel">
-            <div className="section-number">
-              01 <span>Agent identity</span>
-            </div>
-            <div className="form-stack">
-              <label>
-                Agent name
-                <input
-                  placeholder="e.g. Support triage agent"
-                  disabled={!canEdit}
-                  maxLength={100}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    setSaved(false);
-                  }}
-                />
-              </label>
-              {agent && (
-                <label>
-                  Snapshot change summary{" "}
-                  <span className="field-hint">
-                    Optional. Stored only when a new snapshot is created.
-                  </span>
-                  <input
-                    value={summary}
-                    disabled={!canEdit}
-                    onChange={(e) => setSummary(e.target.value)}
-                    maxLength={1000}
-                    placeholder="e.g. Clarified urgent ticket criteria"
-                  />
-                </label>
-              )}
-              <label>
-                Description
-                <textarea
-                  rows={2}
-                  maxLength={500}
-                  placeholder="What does this agent help your team accomplish?"
-                  disabled={!canEdit}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </label>
-            </div>
-          </section>
-          <section className="panel">
-            <div
-              className="editor-tabs"
-              role="tablist"
-              aria-label="Agent configuration"
-            >
-              {tabs.map((t) => (
-                <button
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={tab === t.id ? "active" : ""}
-                >
-                  <t.icon size={15} />
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div className="tab-content" role="tabpanel">
-              {tab === "versions" ? (
-                agent && versions ? (
-                  <VersionHistory
-                    key={`${agent.id}-${versions.items[0]?.id || "empty"}`}
-                    agent={{ ...agent, revision }}
-                    initial={versions}
-                    dirty={current !== baseline}
-                    canEdit={canEdit}
-                    connections={connections}
-                  />
-                ) : (
-                  <div className="inline-empty">
-                    <History size={25} />
-                    <h3>Save your agent first</h3>
-                    <p>
-                      Saved instructions can be frozen as an immutable test
-                      snapshot.
-                    </p>
-                  </div>
-                )
-              ) : tab === "instructions" ? (
-                <>
-                  <div className="row between">
-                    <div>
-                      <h2>Tell your agent how to work</h2>
-                      <p className="muted">
-                        Be specific about its role, decisions and expected
-                        output.
-                      </p>
-                    </div>
-                    <FileText size={19} className="muted" />
-                  </div>
-                  <label className="form-stack mt-6">
-                    Instructions
-                    <textarea
-                      className="instructions-editor"
-                      disabled={!canEdit}
-                      placeholder={
-                        "You are a support triage agent.\n\nRead the incoming ticket and classify its priority as urgent or normal.\nReturn a structured result matching the output schema.\nDo not take actions outside your approved tools."
-                      }
-                      value={config.instructions}
-                      maxLength={32000}
-                      onChange={(e) =>
-                        setConfig({ ...config, instructions: e.target.value })
-                      }
-                      rows={13}
-                    />
-                  </label>
-                  <span className="field-hint">
-                    {config.instructions.length.toLocaleString()} / 32,000
-                    characters · Instructions guide behavior; tool permissions
-                    enforce access.
-                  </span>
-                </>
-              ) : tab === "model" ? (
-                <>
-                  <h2>Model & approved tools</h2>
-                  <p className="muted">
-                    Select a model verified for this workspace.
-                  </p>
-                  <label className="form-stack mt-6">
-                    Provider
-                    <select
-                      value={config.provider}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          provider: e.target.value as AgentConfig["provider"],
-                          tool_keys: [],
-                          model_id:
-                            connections.find(
-                              (item) => item.provider === e.target.value,
-                            )?.default_model_id || "",
-                        })
-                      }
-                      disabled={!canEdit}
-                    >
-                      <option value="openai">OpenAI</option>
-                      <option value="openrouter">OpenRouter</option>
-                      <option value="anthropic">Claude (Anthropic)</option>
-                      <option value="gemini">Gemini (Google)</option>
-                      <option value="deepseek">DeepSeek</option>
-                    </select>
-                  </label>
-                  {connection?.state === "active" ? (
-                    <div className="form-stack mt-6">
-                      <label>
-                        Verified model
-                        <select
-                          value={config.model_id}
-                          onChange={(e) =>
-                            setConfig({
-                              ...config,
-                              model_id: e.target.value,
-                              tool_keys: connection.model_capabilities[
-                                e.target.value
-                              ]?.local_tools
-                                ? config.tool_keys
-                                : [],
-                            })
-                          }
-                          disabled={!canEdit}
-                        >
-                          <option value="">Choose a model</option>
-                          {connection.verified_models.map((id) => (
-                            <option value={id} key={id}>
-                              {id}
-                              {isRunnableModel(connections, config.provider, id)
-                                ? " · Live runs"
-                                : " · Setup only"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <p className="field-hint">
-                        Access was checked on{" "}
-                        {new Date(connection.verified_at).toLocaleString()}.
-                        Publishing validates your saved schema; it does not
-                        execute the model. Live runs are available only for
-                        models marked above.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="inline-empty">
-                      <Sparkles size={25} />
-                      <h3>No model provider connected</h3>
-                      <p>
-                        Connect a provider in Integrations before choosing a
-                        model or publishing.
-                      </p>
-                      <Button asChild variant="outline">
-                        <Link href={`/w/${workspaceId}/integrations`}>
-                          Open integrations
-                        </Link>
-                      </Button>
-                    </div>
-                  )}
-                  <div className="permission-callout">
-                    <ShieldCheck size={18} />
-                    <div>
-                      <strong>
-                        {config.tool_keys.length
-                          ? `${config.tool_keys.length} tool grant${config.tool_keys.length === 1 ? "" : "s"} selected`
-                          : "No tool access granted"}
-                      </strong>
-                      <p>
-                        Models with local tool support can call selected tools
-                        after publication. Workspace approval is checked when
-                        each run starts and before each call.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="agent-tool-list">
-                    {tools.map((tool) => (
-                      <div key={tool.key} className="agent-tool-option">
-                        <label className="agent-tool-selection">
-                          <input
-                            type="checkbox"
-                            aria-label={`Grant ${tool.name}`}
-                            checked={config.tool_keys.includes(
-                              tool.key as AgentConfig["tool_keys"][number],
-                            )}
-                            disabled={
-                              !canEdit ||
-                              !tool.installed ||
-                              !connection?.model_capabilities[config.model_id]
-                                ?.local_tools
-                            }
-                            onChange={(event) => {
-                              const keys = event.target.checked
-                                ? [
-                                    ...config.tool_keys,
-                                    tool.key as AgentConfig["tool_keys"][number],
-                                  ]
-                                : config.tool_keys.filter(
-                                    (key) => key !== tool.key,
-                                  );
-                              setConfig({ ...config, tool_keys: keys });
-                            }}
-                          />
-                          <span>
-                            <strong>{tool.name}</strong>
-                            <small>
-                              {tool.installed
-                                ? tool.description
-                                : "Approve in Tool Registry first"}
-                            </small>
-                          </span>
-                        </label>
-                        <details className="agent-tool-contract">
-                          <summary>Arguments and permissions</summary>
-                          <p>
-                            {tool.read_only
-                              ? "Read-only local tool. No network or credential access."
-                              : "Review this tool's permissions before granting access."}
-                          </p>
-                          <pre>
-                            {JSON.stringify(tool.input_schema, null, 2)}
-                          </pre>
-                        </details>
-                      </div>
-                    ))}
-                    {!tools.length && (
-                      <p className="field-hint">
-                        No reviewed tools are available yet.
-                      </p>
-                    )}
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/w/${workspaceId}/tools`}>
-                        Open Tool Registry
-                      </Link>
-                    </Button>
-                  </div>
-                </>
-              ) : tab === "schemas" ? (
-                <>
-                  <h2>Make inputs and outputs predictable</h2>
-                  <p className="muted">
-                    Object schemas describe the data this agent receives and
-                    returns.
-                  </p>
-                  <div className="schema-grid">
-                    <SchemaEditor
-                      title="Input"
-                      value={input}
-                      onChange={setInput}
-                      disabled={!canEdit}
-                      strict={false}
-                    />
-                    <SchemaEditor
-                      title="Output"
-                      value={output}
-                      onChange={setOutput}
-                      disabled={!canEdit}
-                      strict={
-                        config.provider === "openai" ||
-                        config.provider === "openrouter"
-                      }
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2>Set the boundaries</h2>
-                  <p className="muted">
-                    Supported live models use these caps when a run starts.
-                  </p>
-                  <div className="limits-grid">
-                    <label>
-                      Maximum output tokens
-                      <input
-                        type="number"
-                        min={16}
-                        max={4096}
-                        disabled={!canEdit}
-                        value={config.limits.max_output_tokens}
-                        onChange={(e) =>
-                          limit("max_output_tokens", e.target.value)
-                        }
-                      />
-                      <span className="field-hint">
-                        16–4,096 per model call; the cost budget may lower this
-                        allowance.
-                      </span>
-                    </label>
-                    <label>
-                      Maximum iterations
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={config.limits.max_iterations}
-                        disabled={!canEdit}
-                        onChange={(e) =>
-                          limit("max_iterations", e.target.value)
-                        }
-                      />
-                      <span className="field-hint">
-                        At most 20 model calls.
-                      </span>
-                    </label>
-                    <label>
-                      Execution timeout (seconds)
-                      <input
-                        type="number"
-                        min={1}
-                        max={300}
-                        value={config.limits.timeout_seconds}
-                        disabled={!canEdit}
-                        onChange={(e) =>
-                          limit("timeout_seconds", e.target.value)
-                        }
-                      />
-                    </label>
-                    <label>
-                      Maximum cost per run (USD)
-                      <input
-                        inputMode="decimal"
-                        value={config.limits.max_cost_usd}
-                        disabled={!canEdit}
-                        onChange={(e) => limit("max_cost_usd", e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Maximum tool calls
-                      <input
-                        type="number"
-                        min={0}
-                        max={32}
-                        value={config.limits.max_tool_calls}
-                        disabled={!canEdit}
-                        onChange={(e) =>
-                          limit("max_tool_calls", e.target.value)
-                        }
-                      />
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
+      <div className="builder-split">
+        <div className="builder-blocks">
+          <ReadinessMeter ready={ready} onOpen={reveal} />
+          <Block id="persona" icon={<Sparkles size={16} />} title="Persona" summary={description || firstLine || "Give it a purpose and a voice"} done={ready.persona} open={open.has("persona")} onToggle={() => toggle("persona")}>
+            <PersonaBlock config={config} setConfig={setConfig} description={description} setDescription={setDescription} canEdit={canEdit} />
+          </Block>
+          <Block id="brain" icon={<Cpu size={16} />} title="Brain" summary={config.model_id ? `${PROVIDER_LABEL[config.provider]} · ${config.model_id}` : "Choose a model"} done={ready.brain} open={open.has("brain")} onToggle={() => toggle("brain")}>
+            <BrainBlock config={config} setConfig={setConfig} connections={connections} workspaceId={workspaceId} canEdit={canEdit} />
+          </Block>
+          <Block id="tools" icon={<Wrench size={16} />} title="Tools" summary={toolCount(config) ? `${toolCount(config)} tool${toolCount(config) === 1 ? "" : "s"} on` : "Optional · let it look things up and act"} done={ready.tools && toolCount(config) > 0} optional open={open.has("tools")} onToggle={() => toggle("tools")}>
+            <ToolShelf
+              grants={config}
+              setGrants={(grants) => setConfig({ ...config, ...grants })}
+              supported={!!connection?.model_capabilities[config.model_id]?.local_tools}
+              unsupportedNote={config.model_id ? `${config.model_id} can't call tools. Pick a model with the Tools badge in Brain.` : "Choose a model first."}
+              tools={tools} mcpServers={mcpServers} httpTools={httpTools} canEdit={canEdit} workspaceId={workspaceId} onConnect={mcpListing && canManage ? () => setDrawer(true) : undefined} />
+          </Block>
+          <Block id="skills" icon={<BookOpen size={16} />} title="Skills" summary={config.skills.length ? config.skills.map((grant) => grant.name).filter(Boolean).join(", ") : "Optional · reusable know-how it loads when needed"} done={config.skills.length > 0} optional open={open.has("skills")} onToggle={() => toggle("skills")}>
+            <SkillsBlock config={config} setConfig={setConfig} skills={skills} pinned={published?.config.skills} onDemand={connection?.model_capabilities[config.model_id] ? !!connection.model_capabilities[config.model_id].local_tools : null} workspaceId={workspaceId} canEdit={canEdit} />
+          </Block>
+          <Block id="memory" icon={<Brain size={16} />} title="Memory" summary={config.memory ? `Remembers ${config.memory.max_turns} exchanges by ${config.memory.key_pointer}` : "Optional · off"} done={!!config.memory && ready.memory} optional open={open.has("memory")} onToggle={() => toggle("memory")}>
+            <MemoryBlock config={config} setConfig={setConfig} inputText={input} agentId={agent?.id} workspaceId={workspaceId} canEdit={canEdit} canManage={canManage} />
+          </Block>
+          <Block id="io" icon={<Shapes size={16} />} title="Input & output" summary={preset ? `${preset.emoji} ${preset.label}` : schemasValid ? "🧩 Custom fields" : "Fix the field definitions"} done={ready.io} open={open.has("io")} onToggle={() => toggle("io")}>
+            <IoBlock input={input} output={output} setInput={setInput} setOutput={setOutput} strictOutput={config.provider === "openai" || config.provider === "openrouter"} canEdit={canEdit} />
+          </Block>
+          <Block id="guardrails" icon={<ShieldCheck size={16} />} title="Guardrails" summary={`$${Number(config.limits.max_cost_usd).toFixed(2)} per run · ${config.limits.max_tool_calls} tool calls · ${config.limits.timeout_seconds}s`} done={ready.guardrails} open={open.has("guardrails")} onToggle={() => toggle("guardrails")}>
+            <GuardrailsBlock config={config} setConfig={setConfig} connection={connection} canEdit={canEdit} />
+          </Block>
+          {agent && (
+            <Block id="performance" icon={<Activity size={16} />} title="Performance" summary="Runs, success, cost, tools and feedback" done={false} optional open={open.has("performance")} onToggle={() => toggle("performance")}>
+              <PerformanceBlock workspaceId={workspaceId} agentId={agent.id} />
+            </Block>
+          )}
+          {agent && versions && (
+            <Block id="history" icon={<History size={16} />} title="History" summary={`${versions.items.length} version${versions.items.length === 1 ? "" : "s"}`} done={false} optional open={open.has("history")} onToggle={() => toggle("history")}>
+              <VersionHistory key={`${agent.id}-${versions.items[0]?.id || "empty"}`} agent={{ ...agent, revision }} initial={versions} dirty={dirty} canEdit={canEdit} connections={connections} />
+            </Block>
+          )}
+          {agent && (
+            <Block id="use" icon={<Rocket size={16} />} title="Use it" summary={published ? "Chat, call from your app, or add to a workflow" : "Publish to use it"} done={!!published} optional open={open.has("use")} onToggle={() => toggle("use")}>
+              <UsePanel workspaceId={workspaceId} agentId={agent.id} published={published} />
+            </Block>
+          )}
         </div>
-        <aside className="agent-summary panel">
-          <span className="node-icon purple">
-            <Bot size={27} />
-          </span>
-          <h2>{name || "Your new agent"}</h2>
-          <p>{description || "A focused agent starts with a clear purpose."}</p>
-          <Badge tone="purple">Draft configuration</Badge>
-          <div className="summary-divider" />
-          <div className="summary-line">
-            <span>Instructions</span>
-            <strong>{config.instructions ? "Configured" : "Not set"}</strong>
-          </div>
-          <div className="summary-line">
-            <span>Model provider</span>
-            <strong>
-              {connection?.state === "active"
-                ? `${connection.display_name} · ${config.model_id || "Choose model"}`
-                : "Not connected"}
-            </strong>
-          </div>
-          <div className="summary-line">
-            <span>Tool permissions</span>
-            <strong>
-              {config.tool_keys.length
-                ? `${config.tool_keys.length} selected`
-                : "None"}
-            </strong>
-          </div>
-          <div className="summary-divider" />
-          <h3>Resource budget</h3>
-          <div className="summary-line">
-            <span>Output tokens</span>
-            <strong>{config.limits.max_output_tokens} max / call</strong>
-          </div>
-          <div className="summary-line">
-            <span>Iterations</span>
-            <strong>{config.limits.max_iterations} max</strong>
-          </div>
-          <div className="summary-line">
-            <span>Timeout</span>
-            <strong>{config.limits.timeout_seconds}s</strong>
-          </div>
-          <div className="summary-line">
-            <span>Spend</span>
-            <strong>${config.limits.max_cost_usd} / run</strong>
-          </div>
-          <div className="permission-callout">
-            <ShieldCheck size={17} />
-            <p>Saving a draft does not publish it or trigger a model call.</p>
-          </div>
-          <div className="summary-divider" />
-          <h3>Publication checklist</h3>
-          <p>
-            Save your draft, then check schemas, model access, tools and limits.
-            This does not call a model.
-          </p>
-          <Button
-            variant="outline"
-            disabled={
-              !agent ||
-              current !== baseline ||
-              checking ||
-              busy ||
-              publishBusy ||
-              snapshotBusy
-            }
-            onClick={checkReadiness}
-          >
-            {checking ? "Checking…" : "Check readiness"}
-          </Button>
-          {current !== baseline && (
-            <p className="field-hint">Save changes to refresh the checklist.</p>
-          )}
-          {readiness && current === baseline && (
-            <div role="status">
-              <p>
-                {readiness.publishable
-                  ? readiness.runnable
-                    ? "Ready to publish and run."
-                    : "Ready to publish for setup only."
-                  : "Resolve these issues before publishing."}
-              </p>
-              {[...readiness.errors, ...readiness.warnings].map((issue, i) => (
-                <div className="readiness-issue" key={`${issue.code}-${i}`}>
-                  <small>
-                    {readiness.errors.includes(issue) ? "Required" : "Note"}
-                  </small>
-                  <p>{issue.message}</p>
-                  <button
-                    className="text-link"
-                    onClick={() => setTab(issue.section)}
-                  >
-                    Open {issue.section}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <aside className="builder-try">
+          <TryPanel workspaceId={workspaceId} agentId={agent?.id} config={draft} schemasValid={schemasValid} canEdit={canEdit} />
         </aside>
       </div>
-    </>
+      {drawer && mcpListing && (
+        <div className="builder-drawer" role="dialog" aria-label="Connect an MCP server">
+          <div className="builder-drawer-panel">
+            <header>
+              <strong>Connect a server</strong>
+              <button type="button" className="icon-button" aria-label="Close" onClick={() => { setDrawer(false); router.refresh(); }}><X size={16} /></button>
+            </header>
+            <McpConnections workspaceId={workspaceId} initial={mcpListing} canManage={canManage} canTest={canEdit} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

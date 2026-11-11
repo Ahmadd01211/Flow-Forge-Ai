@@ -1,4 +1,6 @@
-from typing import Literal
+import uuid
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -9,10 +11,74 @@ class Position(BaseModel):
     y: float = Field(ge=-100000, le=100000, allow_inf_nan=False)
 
 
+class WorkflowStepRead(BaseModel):
+    node_id: str
+    type: str
+    status: Literal["running", "waiting", "completed", "skipped", "failed"]
+    output: Any
+    usage: dict | None = None
+    selected_port: str | None = None
+    error_code: str | None = None
+    attempt: int = 1
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: int | None = None
+    definition_node_id: str | None = None
+    scope: list[str] = Field(default_factory=list)
+    parent_node_id: str | None = None
+    iteration_index: int | None = None
+    workflow_version_id: uuid.UUID | None = None
+
+
+class WorkflowStepDetail(WorkflowStepRead):
+    input: Any
+
+
+class WorkflowPauseRead(BaseModel):
+    id: uuid.UUID
+    node_id: str
+    kind: Literal["approval", "wait"]
+    state: Literal["pending", "approved", "rejected", "elapsed", "expired", "cancelled"]
+    prompt: str
+    allow_requester: bool
+    created_at: datetime
+    due_at: datetime
+    decided_by: uuid.UUID | None
+    settled_at: datetime | None
+
+
+class WorkflowRunRead(BaseModel):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    version_id: uuid.UUID
+    automation_id: uuid.UUID | None
+    deployment_id: uuid.UUID | None
+    source: Literal["manual", "chat", "webhook", "schedule", "deployment", "replay"] = "manual"
+    state: Literal["queued", "running", "waiting", "completed", "failed", "cancelled"]
+    requested_by: uuid.UUID
+    pauses: list[WorkflowPauseRead] = Field(default_factory=list)
+    output: Any
+    steps: list[WorkflowStepRead] | None
+    error_code: str | None
+    reserved_max_usd: str
+    cost_usd: str | None
+    uncertain_cost_usd: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    cancel_requested: bool
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class WorkflowRunList(BaseModel):
+    items: list[WorkflowRunRead]
+
+
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
-    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "agent", "tool", "mcp_tool", "condition", "transform", "text_template", "list_filter", "json_parse", "result"]
+    type: Literal["manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger", "agent", "llm", "tool", "mcp_tool", "http_tool", "subworkflow", "for_each", "approval", "wait", "condition", "merge", "transform", "text_template", "list_filter", "json_parse", "result"]
     label: str = Field(min_length=1, max_length=100)
     position: Position
     join: Literal["all", "active"] = "all"
@@ -95,3 +161,35 @@ class WorkflowUpdate(WorkflowCreate):
 class ValidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=1)
+
+
+class DraftCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    graph: Graph
+
+
+class WorkflowCallOption(BaseModel):
+    id: uuid.UUID
+    workflow_id: uuid.UUID
+    name: str
+    number: int
+    input_schema: dict
+    output_schema: dict
+    expanded_steps: int
+    agent_steps: int
+    has_external: bool
+    has_pause: bool
+    limits: dict
+
+
+class WorkflowCallOptions(BaseModel):
+    items: list[WorkflowCallOption]
+
+
+class NodeTest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    graph: Graph
+    input: Any = Field(default_factory=dict)
+    # Earlier steps' outputs by node ID, for result fields that read them.
+    outputs: dict[str, Any] = Field(default_factory=dict, max_length=100)
+    confirm_external: bool = False

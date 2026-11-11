@@ -56,7 +56,8 @@ def test_published_mcp_workflow_pins_grant_and_runs(client, owner, db, monkeypat
 
     calls = []
     run_id = None
-    def remote_call(url, key, name, data):
+    def remote_call(url, key, name, data, timeout_seconds):
+        assert 0 < timeout_seconds <= 12
         db.expire_all()
         active = db.scalar(select(WorkflowRun).where(WorkflowRun.id == uuid.UUID(run_id)))
         assert active.external_started_at is not None

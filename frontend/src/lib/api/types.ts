@@ -19,8 +19,7 @@ export type ConnectionList = components["schemas"]["ConnectionList"];
 export type AgentRun = components["schemas"]["RunRead"];
 export type RunEvent = components["schemas"]["RunEventRead"];
 export type RunList = components["schemas"]["RunList"];
-export type NodeKind =
-  "manual_input" | "webhook_trigger" | "schedule_trigger" | "agent" | "tool" | "mcp_tool" | "condition" | "transform" | "text_template" | "list_filter" | "json_parse" | "result";
+export type NodeKind = components["schemas"]["Node"]["type"];
 export interface GraphNode {
   id: string;
   type: NodeKind;
@@ -55,19 +54,54 @@ export interface Workflow {
   revision: number;
   updated_at: string;
 }
+export interface ValidationIssue {
+  code: string;
+  message: string;
+  node_id?: string | null;
+  edge_id?: string | null;
+  path?: string | null;
+}
 export interface Validation {
   valid: boolean;
   publishable: boolean;
-  revision: number;
+  /** Present for saved-revision validation; absent for a live draft check. */
+  revision?: number;
   scope: string;
-  errors: {
-    code: string;
-    message: string;
-    node_id?: string;
-    edge_id?: string;
-    path?: string;
-  }[];
-  warnings: unknown[];
+  errors: ValidationIssue[];
+  warnings: ValidationIssue[];
+  expanded_steps?: number;
+  agent_steps?: number;
+  has_external?: boolean;
+}
+export interface AgentRunSummary {
+  id: string;
+  state: "queued" | "running" | "completed" | "failed" | "cancelled";
+  output: Record<string, unknown> | null;
+  error_code: string | null;
+  reserved_max_usd: string;
+  cost_usd: string | null;
+  uncertain_cost_usd: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+}
+export interface NodeTestResult {
+  node_id: string;
+  type: NodeKind;
+  status: "completed" | "failed" | "queued";
+  output: unknown;
+  selected_port: "true" | "false" | null;
+  error: { code: string; message: string } | null;
+  duration_ms: number;
+  external: boolean;
+  agent_run: AgentRunSummary | null;
+}
+export interface ToolOption {
+  key: string;
+  name: string;
+  description: string;
+  input_schema: { properties?: Record<string, unknown>; required?: string[] };
+  read_only: boolean;
+  installed: boolean;
 }
 export interface List<T> {
   items: T[];

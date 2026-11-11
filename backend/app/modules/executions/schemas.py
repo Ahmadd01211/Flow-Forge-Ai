@@ -15,7 +15,7 @@ class RunRead(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     version_id: uuid.UUID
-    state: Literal["queued", "running", "completed", "failed", "cancelled"]
+    state: Literal["queued", "running", "waiting", "completed", "failed", "cancelled"]
     output: dict[str, Any] | None
     error_code: str | None
     cancel_requested: bool

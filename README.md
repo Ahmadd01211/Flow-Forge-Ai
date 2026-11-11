@@ -4,7 +4,19 @@ An independent AI agent builder and workflow automation platform.
 
 Agent authoring: guided schema fields, tool argument/permission inspection, publication readiness checks and versioned output-token ceilings are available in the editor. See [agent-builder walkthrough](docs/learning/11-AGENT-BUILDER.md).
 
+Guided first run: start from Overview → **Choose a task**, preview the recommended support-triage agent, and follow the [manual first-run checklist](docs/learning/24-GUIDED-FIRST-RUN.md). Live model runs require your provider key and may incur charges.
+
+Workflow MCP steps use a searchable, server-grouped tool picker with descriptions and read/write labels. See the [manual MCP picker checklist](docs/learning/25-MCP-TOOL-PICKER.md).
+
+User templates: save a draft in the agent editor or visual workflow builder, then choose **Save as template**. Enter a name, description and category; access defaults to **Only me**. Choose workspace members or everyone signed in to share. The Templates gallery supports previews, independent editable copies, and creator-controlled sharing changes. Revoking sharing blocks future access and copies; existing copies remain independent. Review instructions and fixed values before sharing. Stored credentials are excluded, and copied agent, MCP, HTTP and trigger steps require configuration. Database migration `0016` is required; the normal Docker Compose startup applies it.
+
 Provider capabilities: Integrations now shows backend-owned execution/tool support and estimated token rates for 11 reviewed model IDs across the five providers. Refresh a model list using the saved key without rotating it. Other provider-listed models remain labeled setup only. See [supported scope and provider sources](docs/learning/10-PROVIDER-CAPABILITIES.md).
+
+Usage & budgets now shows actual recorded usage, active reservations and uncertain charges across agents/workflows. Owners/admins can set shared daily model budgets, accepted-run limits and active capacity. These apply equally to interactive runs, hosted calls, webhooks and schedules. Defaults are $10/day and 1,000 accepted runs/day; see [usage policy and limitations](docs/learning/14-WORKSPACE-USAGE-LIMITS.md). Compose applies migrations through `0032` at startup.
+
+MCP servers: owners/admins choose **Integrations → MCP servers → Add server** to connect any public HTTPS MCP server. Read-only tools start allowed; write tools stay blocked until allowed per tool. See [workspace MCP servers and tool policies](docs/learning/23-WORKSPACE-MCP-SERVERS.md).
+
+Calendar schedules: in **Triggers & schedules**, choose **Calendar (cron)** for rules such as `0 9 * * 1-5` in a chosen timezone, and preview the next five runs before saving. See [cron schedules and daylight-saving behavior](docs/learning/22-CRON-SCHEDULES.md).
 
 Accounts and teams: Settings now supports email verification, invitations, member roles/removal, ownership transfer, workspace creation/rename, password changes and signing out all devices. Password recovery starts from sign-in. Development emails appear at http://localhost:8025; configure SMTP for public delivery. See [accounts walkthrough](docs/learning/09-ACCOUNTS-AND-WORKSPACES.md) and [development phases](docs/DEVELOPMENT_PHASES.md).
 
@@ -25,29 +37,31 @@ The initializer preserves an existing `.env` and generates local secrets without
 
 ## Current implementation
 
-- Next.js App Router, TypeScript, Tailwind, reusable UI primitives and responsive navy/white product styling.
-- Registration/login/logout, Argon2id passwords, opaque HttpOnly sessions, CSRF/Origin validation and Redis authentication rate limiting.
-- Owned workspace, dashboard with real draft counts, private agent drafts and bounded configuration fields.
-- Immutable agent test snapshots with history, configuration comparisons, restore into a new draft revision, database-level immutability and append-only audit records.
-- Offline contract playground validates manually supplied input/output examples against a snapshot, with bounded JSON Schema checks and field-level errors. It does not run a model or retain examples.
-- Owner/admin connection setup for OpenAI, OpenRouter, Claude, Gemini and DeepSeek, with verification, encrypted credential storage, rotation and revocation. Editors can publish immutable agent definitions after model and schema checks.
-- Published selected OpenAI, OpenRouter, Claude, Gemini and DeepSeek agent runs with encrypted input/output, idempotent submission, bounded output, cancellation, usage reporting, a durable queue and worker recovery.
-- Reviewed Tool Registry with workspace approvals, bounded local tool tests, immutable agent tool grants, a controlled OpenAI tool-call harness and metadata-only execution traces.
-- Operator-curated MCP Streamable HTTP connections with encrypted workspace bearer tokens, exact tool allowlists and bounded remote tool tests.
-- Five curated agent/workflow starter templates and a bounded linear workflow draft preview with approved local tools.
-- Saved workflow drafts with XYFlow canvas, node palette, inspector, connection editing, undo and keyboard-friendly step list.
-- Backend structural graph validation for cycles, connectivity, endpoints, ports and unavailable dependencies. Validation is explicitly not publication readiness.
-- Alembic migration, separate application/migration DB users, Docker Compose, locked dependencies and CI configuration.
+- Accounts, recovery, email verification, teams, invitations and workspace roles.
+- Five provider connections with encrypted keys and eleven reviewed model profiles; bounded native tool protocols for OpenAI, OpenRouter, Claude, Gemini and DeepSeek.
+- Agent authoring, immutable versions, regression examples, MCP grants under per-tool Allow/Block policies and read-only HTTP grants.
+- Visual workflows with up to thirty direct steps/four agents, branches, merges, field mappings, bounded For each loops and pinned reusable workflow calls. Expansion is limited to three workflow levels, 120 steps and eight agent calls.
+- Durable runs with encrypted checkpoints, safe recovery, cancellation, local retry policies, explicit replay and step debugging.
+- Authenticated JSON webhooks, interval and cron schedules, pinned deployment endpoints and shared usage/admission budgets.
+- Durable human approvals and timers, plus an owner/admin activity log with JSON export.
+- Guided GitHub and Slack recipes on top of approved HTTP tools.
+- Admin-approved HTTPS API tools with encrypted reusable header credentials and durable workflow action receipts.
+- Ten starter templates, including a working child/batch pair and service actions, plus user saving/sharing and portable private JSON import/export.
+- Docker Compose, PostgreSQL migrations through 0032, separate DB roles, contract generation, CI and an encrypted backup/isolated restore helper.
+- Guided agent workbench with reviewable assistant proposals, conversation memory, workspace skills and tool-aware testing.
+- Workflow chat and bounded model/tool nodes that remain within the existing graph validation and durable run path.
+- Workspace activity overview plus durable run traces and feedback tied to execution evidence.
+- OpenAPI contract and generated frontend types include the current workbench endpoints; local migration head is `0032`.
 
-Agent-initiated MCP calls, multiple agent nodes per workflow and production key rotation are not implemented yet. Run costs are estimates until provider usage is known, and uncertain model outcomes preserve a possible-charge estimate. Draft collection APIs currently return up to 100 drafts; version history has cursor pagination. This is a local development milestone, not a production-ready release.
+Open **Tool Registry → HTTP API tools** to connect a fixed destination. Agents receive reviewed read-only GET grants; write actions execute through published workflows. Credentials never belong in instructions or URLs. Model budgets exclude service API charges. See [API tools and template files](docs/learning/17-HTTP-API-TOOLS-AND-TEMPLATE-FILES.md).
 
-To try the new slice: save an agent with instructions → **Create snapshot** → **History** → **Validate example data**. Restore copies a selected snapshot into a new draft revision, after confirmation, without changing historical snapshots.
+To try a workflow, preview a starter in **Templates**, connect its required tools/agent versions, validate, publish and run. **Executions → Workflows** shows step evidence. **Triggers & schedules** binds a published version to a webhook or persistent interval. The operator-curated MCP catalog is empty by default; remote servers must be explicitly configured through `MCP_CATALOG_JSON`.
 
-The provider slice adds **Integrations → Verify and connect** for OpenAI, OpenRouter, Claude, Gemini and DeepSeek workspace keys. Then select a provider and listed model in an agent draft, save, and **Publish version**. Verification does not generate output; no API key is bundled with the project. Enter your own key only in the local Integrations form. The ignored `.local/secrets/credential-master.key` file protects stored credentials and must be backed up separately from the database in any deployment.
+For another app, create a **Deployment** from a published version and keep its one-time key on your app server. Local endpoints use idempotent submission and scoped polling. No provider key is bundled: enter your own key in Integrations. Real provider/service calls may incur charges.
 
-To try a live run, publish a version using a model marked Live runs, open its **History** tab, select **Run agent**, and enter input JSON. This makes a real provider request with your connected key and may incur charges. The **Runs** page shows state and outcome. Additional listed models require an execution adapter and price policy before they can run.
+The local milestone remains bounded. General while-loops, richer expressions, signed vendor webhooks, fine-grained permissions and OAuth remain on the [phase roadmap](docs/DEVELOPMENT_PHASES.md). Public hosting and subscription billing are outside this local-first pass. Real upstream acceptance, operator quotas, capacity isolation and security operations must be addressed before serving customers.
 
-To expose a published version to another app, open **Deployments**, choose the version, and copy the one-time API key into your app server. See [hosted deployments](docs/learning/07-HOSTED-DEPLOYMENTS.md) for the invoke and polling contract. To try tools, approve a handler in **Tool Registry**, then select it in an OpenAI GPT-5 Mini agent draft before publishing. The **Runs** page shows each model and tool step. To run a workflow, open the **Text cleanup** template, approve `text.replace`, then use **Publish** and **Run** in the builder. You can also insert one **AI agent** node and select a published version; tool-using OpenAI GPT-5 Mini agents are supported. **Preview** runs local nodes; agent and MCP steps require a published durable run. The MCP section of **Integrations** lists only servers explicitly added by the platform operator through `MCP_CATALOG_JSON`; the default local installation has no remote server configured. An operator can mark a reviewed tool with `read_only_tools` to make it selectable as an **MCP tool** workflow node.
+Try the new composition phase using **Prepare a customer profile**, publish it, then connect its version in **Batch customer profiles**. Preview with the template's sample JSON and inspect item receipts in **Executions → Workflows**. See the [step-by-step walkthrough and design decisions](docs/learning/19-WORKFLOW-LOOPS-AND-SUBWORKFLOWS.md).
 
 ## Checks
 
@@ -63,7 +77,7 @@ npm run api:check
 npm run build
 ```
 
-Integration tests use the isolated `flowforge_test` database and refuse to reset any database without the `_test` suffix. Frontend builds explicitly use Webpack because this workstation's Turbopack CSS worker failed; the supported Webpack production build passes. No screenshot automation was performed.
+Integration tests use the isolated `flowforge_test` database and refuse to reset any database without the `_test` suffix. Frontend builds explicitly use Webpack because this workstation's Turbopack CSS worker failed; the supported Webpack production build passes. Focused browser review uses a disposable account. The local development server uses Webpack polling so edits on the Windows-mounted source directory refresh reliably.
 
 ## Architecture and learning
 
@@ -71,7 +85,7 @@ Start with the [final technical architecture proposal](docs/technical-architectu
 
 The original JPG references remain unchanged in the project root. No previous project was inspected or reused.
 
-Status: foundation, editable drafts, immutable agent snapshots, five provider connections, OpenAI, Gemini, DeepSeek, Claude Haiku and OpenRouter GPT-4o-mini live agent runs, local tool harness, MCP connection setup, templates, workflow preview, durable linear workflow runs with one published agent step and hosted development endpoints implemented. See [current status](docs/PROJECT_STATUS.md), [the foundation walkthrough](docs/learning/01-foundation.md), [the snapshot/contract lesson](docs/learning/02-agent-snapshots.md), [the provider lesson](docs/learning/03-provider-connections.md), [the run lesson](docs/learning/04-agent-runs.md), [the harness lesson](docs/learning/05-AGENT-HARNESS.md) [the MCP/templates/preview lesson](docs/learning/06-MCP-TEMPLATES-WORKFLOW-PREVIEW.md) and [the hosted deployment lesson](docs/learning/07-HOSTED-DEPLOYMENTS.md).
+Status and evidence: [current project status](docs/PROJECT_STATUS.md). Walkthroughs explain the decisions and their limits, including [DAG authoring](docs/learning/15-WORKFLOW-GRAPHS-AND-MAPPINGS.md), [durable execution](docs/learning/16-WORKFLOW-CHECKPOINTS-AND-DEBUGGER.md) and [local release/backup recovery](docs/learning/18-LOCAL-RELEASE-AND-RECOVERY.md).
 
 ## API contract generation
 

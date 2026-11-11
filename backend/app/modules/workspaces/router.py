@@ -10,12 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.errors import fail
-from app.modules.agents.models import Agent
 from app.modules.audit.service import record
 from app.modules.identity.mail import enqueue
 from app.modules.identity.models import User
 from app.modules.identity.service import check_csrf, current_session, rate_limit, token_hash
-from app.modules.workflows.models import Workflow
 from app.modules.workspaces.models import Workspace, WorkspaceInvitation, WorkspaceMember
 from app.modules.workspaces.service import authorize
 
@@ -27,7 +25,7 @@ def administration(workspace_id, request, db):
     if member.role not in {"owner", "admin"}:
         fail(403, "FORBIDDEN", "Workspace administration is required.")
     # Serialize membership changes and re-check access after acquiring the lock.
-    workspace = db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update())
+    workspace = db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update().execution_options(populate_existing=True))
     member = db.scalar(
         select(WorkspaceMember)
         .where(WorkspaceMember.id == member.id)
@@ -333,15 +331,7 @@ def workspace(workspace_id: uuid.UUID, request: Request, db: Session = Depends(g
 
 @router.get("/{workspace_id}/overview")
 def overview(workspace_id: uuid.UUID, request: Request, db: Session = Depends(get_db)) -> dict:
-    authorize(request, db, workspace_id)
-    return {
-        "agents": db.scalar(
-            select(func.count())
-            .select_from(Agent)
-            .where(Agent.workspace_id == workspace_id, Agent.archived_at.is_(None))
-        ),
-        "workflows": db.scalar(
-            select(func.count()).select_from(Workflow).where(Workflow.workspace_id == workspace_id)
-        ),
-        "execution_enabled": False,
-    }
+    from app.modules.workspaces.overview import build
+
+    workspace, member = authorize(request, db, workspace_id)
+    return build(db, workspace, member)

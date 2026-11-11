@@ -6,10 +6,12 @@ from decimal import Decimal
 from celery import Celery
 from sqlalchemy import or_, select
 
+from app import models  # noqa: F401 -- workers start without API router imports
 from app.core.config import Settings
 from app.core.db import make_sessions
-from app.modules.executions.models import AgentRun
+from app.modules.executions.models import AgentRun, AgentToolApproval
 from app.modules.executions.runtime import execute
+from app.modules.workflows.checkpoints import settle_unfinished
 from app.modules.workflows.models import WorkflowRun, WorkflowVersion
 from app.modules.workflows.runtime import execute as execute_workflow_runtime
 
@@ -43,6 +45,9 @@ def reconcile_workflows_once() -> int:
     now = datetime.now(UTC)
     dispatched = []
     try:
+        from app.core.credentials import load_master_key
+        from app.modules.workflows.pauses import reconcile as reconcile_pauses
+        reconcile_pauses(sessions, load_master_key(settings.credential_key_path), now)
         with sessions() as db:
             rows = db.scalars(
                 select(WorkflowRun)
@@ -57,17 +62,20 @@ def reconcile_workflows_once() -> int:
                     run.error_code = None if run.cancel_requested_at else "RUN_TIMEOUT"
                     if run.external_started_at and run.cost_usd is None:
                         version = db.scalar(select(WorkflowVersion).where(WorkflowVersion.id == run.version_id))
-                        if version and any(node.get("type") == "agent" for node in version.graph.get("nodes", [])):
+                        if version and any(node.get("type") in ("agent", "llm") for node in version.graph.get("nodes", [])):
                             run.uncertain_cost_usd = Decimal(version.graph["limits"]["max_cost_usd"])
                     run.finished_at = now
                     run.claim_token = None
+                    settle_unfinished(db, run, run.error_code or "RUN_CANCELLED")
                 elif (
                     run.state == "running"
-                    and run.external_started_at is None
+                    and not run.external_inflight
+                    and not (run.heartbeat_at is None and run.external_started_at is not None)
                     and run.started_at
-                    and run.started_at < now - timedelta(seconds=6)
+                    and (run.heartbeat_at or run.started_at) < now - timedelta(seconds=10 if run.heartbeat_at else 6)
                 ):
-                    # Local tools are pure; invalidating the claim makes replay safe.
+                    # Completed checkpoints are reusable; uncheckpointed local
+                    # work is pure. An in-flight external call is never replayed.
                     run.state = "queued"
                     run.claim_token = None
                     run.started_at = None
@@ -95,6 +103,12 @@ def reconcile_once() -> int:
     now = datetime.now(UTC)
     dispatched = []
     try:
+        from app.core.credentials import load_master_key
+        from app.modules.executions.agent_approvals import reconcile as reconcile_agent_approvals
+
+        reconcile_agent_approvals(
+            sessions, load_master_key(settings.credential_key_path), now
+        )
         with sessions() as db:
             rows = db.scalars(
                 select(AgentRun)
@@ -110,6 +124,13 @@ def reconcile_once() -> int:
                         (AgentRun.state == "running")
                         & AgentRun.model_started_at.is_(None)
                         & (AgentRun.started_at < now - timedelta(seconds=45)),
+                        (AgentRun.state == "running")
+                        & (AgentRun.started_at < now - timedelta(seconds=45))
+                        & AgentRun.id.in_(
+                            select(AgentToolApproval.run_id).where(
+                                AgentToolApproval.state.in_(["claimed", "ready", "resuming"])
+                            )
+                        ),
                     )
                 )
                 .order_by(AgentRun.created_at)
@@ -118,6 +139,14 @@ def reconcile_once() -> int:
             ).all()
             for run in rows:
                 if run.deadline_at <= now:
+                    from app.modules.executions.agent_approvals import invalidate_for_run
+
+                    invalidate_for_run(
+                        db,
+                        run,
+                        "RUN_CANCELLED" if run.cancel_requested_at else "RUN_TIMEOUT",
+                        now,
+                    )
                     run.state = "cancelled" if run.cancel_requested_at else "failed"
                     run.error_code = None if run.cancel_requested_at else "RUN_TIMEOUT"
                     run.uncertain_cost_usd = run.reserved_max_usd if run.model_started_at else None
@@ -132,6 +161,56 @@ def reconcile_once() -> int:
                     run.claim_token = None
                     run.started_at = None
                     run.last_dispatched_at = None
+                elif run.state == "running":
+                    approval = db.scalar(
+                        select(AgentToolApproval)
+                        .where(
+                            AgentToolApproval.workspace_id == run.workspace_id,
+                            AgentToolApproval.run_id == run.id,
+                            AgentToolApproval.state.in_(["claimed", "ready", "resuming"]),
+                        )
+                        .with_for_update()
+                    )
+                    if approval:
+                        if approval.state == "ready":
+                            # The MCP result and next provider transcript are encrypted in
+                            # this row, so re-entering the loop cannot replay the tool call.
+                            run.state = "queued"
+                            run.claim_token = None
+                            run.started_at = None
+                            run.model_started_at = None
+                            run.last_dispatched_at = None
+                            continue
+                        if approval.state == "resuming":
+                            # The MCP output is safely persisted, but a provider
+                            # continuation may have started. Fail without replaying it.
+                            approval.state = "completed"
+                            approval.settled_at = now
+                            approval.ciphertext = b""
+                            run.state = "failed"
+                            run.error_code = "PROVIDER_OUTCOME_UNKNOWN"
+                            run.uncertain_cost_usd = run.reserved_max_usd
+                            run.finished_at = now
+                            run.claim_token = None
+                            continue
+                        approval.state = "uncertain"
+                        approval.settled_at = now
+                        approval.ciphertext = b""
+                        run.state = "failed"
+                        run.error_code = "EXTERNAL_OUTCOME_UNKNOWN"
+                        run.uncertain_cost_usd = run.reserved_max_usd
+                        run.finished_at = now
+                        run.claim_token = None
+                        from app.modules.audit.service import record
+
+                        record(
+                            db,
+                            run.workspace_id,
+                            run.requested_by,
+                            "agent_tool_approval.execution_uncertain",
+                            approval.id,
+                            {"run_id": str(run.id), "tool_key": approval.tool_key},
+                        )
             db.commit()
         for run_id in dispatched:
             try:
@@ -148,12 +227,16 @@ def maintenance_loop() -> None:
     while True:
         try:
             reconcile_once()
+            from app.modules.automations.service import tick
+            tick(settings)
             reconcile_workflows_once()
+            from app.modules.agents.memory import purge_expired
             from app.modules.identity.mail import deliver_pending
             sessions = make_sessions(settings.database_url)
             try:
                 with sessions() as db:
                     deliver_pending(db, settings)
+                    purge_expired(db)
             finally:
                 sessions.kw["bind"].dispose()
         except Exception as exc:

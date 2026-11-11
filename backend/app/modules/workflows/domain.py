@@ -24,11 +24,11 @@ def validate_graph(graph: Graph) -> dict:
         error("DUPLICATE_NODE", "Every node needs a unique ID.")
     if len({e.id for e in graph.edges}) != len(graph.edges):
         error("DUPLICATE_EDGE", "Every connection needs a unique ID.")
-    entry_types = {"manual_input", "webhook_trigger", "schedule_trigger"}
+    entry_types = {"manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"}
     entries = [n for n in graph.nodes if n.type in entry_types]
     results = [n for n in graph.nodes if n.type == "result"]
     if len(entries) != 1:
-        error("ENTRY_REQUIRED", "Use exactly one manual input node.")
+        error("ENTRY_REQUIRED", "Use exactly one input or trigger node.")
     if len(results) != 1:
         error("RESULT_REQUIRED", "Use exactly one result node.")
     outgoing: dict[str, list] = {key: [] for key in nodes}
@@ -66,6 +66,15 @@ def validate_graph(graph: Graph) -> dict:
                     error(
                         "POINTER_INVALID", "Use a safe JSON Pointer such as /ticket.", edge=edge.id
                     )
+        targets = [mapping.get("to") for mapping in edge.mappings]
+        if all(isinstance(pointer, str) for pointer in targets):
+            for index, pointer in enumerate(targets):
+                parts = [part.replace("~1", "/").replace("~0", "~") for part in pointer.split("/")[1:]] if pointer else []
+                for other in targets[index + 1:]:
+                    other_parts = [part.replace("~1", "/").replace("~0", "~") for part in other.split("/")[1:]] if other else []
+                    if parts[:len(other_parts)] == other_parts or other_parts[:len(parts)] == parts:
+                        error("MAPPING_CONFLICT", "Mapping targets must be separate fields. A whole-output mapping cannot be combined with other targets.", edge=edge.id)
+                        break
     indegree = {key: len(value) for key, value in incoming.items()}
     ready = deque(key for key, value in indegree.items() if value == 0)
     visited = 0
@@ -118,7 +127,7 @@ def validate_graph(graph: Graph) -> dict:
         "errors": errors,
         "warnings": [],
         "execution_hash": digest,
-        "validator_version": "draft-structural-1",
+        "validator_version": "dag-2",
         "scope": "structural",
         "publishable": False,
     }

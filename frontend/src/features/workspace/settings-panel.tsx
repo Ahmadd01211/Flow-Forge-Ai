@@ -1,4 +1,6 @@
 "use client";
+import Link from "next/link";
+import { LocalTime } from "@/components/shared/local-time";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import type { SessionData } from "@/lib/api/types";
@@ -109,6 +111,16 @@ export function SettingsPanel({
         eyebrow="YOUR WORKSPACE"
         title="Settings"
         description="Manage your account, workspace and team access."
+        action={
+          admin ? (
+            <Link
+              className="text-link"
+              href={`/w/${workspaceId}/settings/activity`}
+            >
+              View activity log
+            </Link>
+          ) : undefined
+        }
       />
       {error && <ErrorNotice message={error} />}
       {message && <p role="status">{message}</p>}
@@ -403,7 +415,7 @@ export function SettingsPanel({
               <div className="row between" key={i.id}>
                 <p>
                   {i.email} · {i.role} · expires{" "}
-                  {new Date(i.expires_at).toLocaleDateString()}
+                  <LocalTime value={i.expires_at} format="date" />
                 </p>
                 <Button
                   variant="outline"

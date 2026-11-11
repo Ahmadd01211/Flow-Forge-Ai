@@ -1,15 +1,33 @@
 import type { AgentConfig } from "@/lib/api/types";
+import { CHAT_INPUT, REPLY_OUTPUT } from "./builder-model";
 
 export const agentStarters: {
   id: string;
+  emoji: string;
   name: string;
   description: string;
   instructions: string;
   inputSchema: AgentConfig["input_schema"];
   outputSchema: AgentConfig["output_schema"];
+  memory?: AgentConfig["memory"];
 }[] = [
   {
+    id: "assistant",
+    emoji: "💬",
+    name: "Chat assistant",
+    description: "A friendly assistant that remembers the conversation.",
+    instructions: [
+      "You are a helpful assistant for our team.",
+      "Be warm and friendly, and use plain language.",
+      "If you are not sure, say so and ask a clarifying question instead of guessing.",
+    ].join("\n"),
+    inputSchema: CHAT_INPUT,
+    outputSchema: REPLY_OUTPUT,
+    memory: { key_pointer: "/conversation_id", max_turns: 10, retention_days: 30 },
+  },
+  {
     id: "triage",
+    emoji: "🚨",
     name: "Support triage",
     description: "Classify an incoming support ticket and explain its priority.",
     instructions: "Read the support ticket. Return urgent only when it describes an outage, security issue, or a customer-blocking failure. Otherwise return normal. Explain the decision briefly. Return only the fields in the output schema.",
@@ -18,6 +36,7 @@ export const agentStarters: {
   },
   {
     id: "extract",
+    emoji: "📇",
     name: "Contact extraction",
     description: "Extract a contact name, email and request from a message.",
     instructions: "Extract the sender's name, email address and request from the provided message. Use an empty string for information that is absent. Do not invent details. Return only the fields in the output schema.",
@@ -26,6 +45,7 @@ export const agentStarters: {
   },
   {
     id: "summarize",
+    emoji: "📝",
     name: "Action summary",
     description: "Turn a note into a concise summary and next action.",
     instructions: "Summarize the note in one sentence and identify one concrete next action. If no action is implied, use an empty string. Do not invent facts. Return only the fields in the output schema.",

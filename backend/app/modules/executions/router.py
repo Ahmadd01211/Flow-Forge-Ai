@@ -1,13 +1,15 @@
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, Request, Response
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.credentials import load_master_key
 from app.core.db import get_db
-from app.modules.executions import service
-from app.modules.executions.models import AgentRun, RunEvent
+from app.modules.executions import service, trace
+from app.modules.executions.models import AgentRun, RunEvent, RunFeedback
 from app.modules.executions.schemas import RunCreate, RunEventList, RunList, RunRead
 from app.modules.identity.service import check_csrf
 from app.modules.workspaces.service import authorize
@@ -26,7 +28,7 @@ def submit_run(
 ):
     _, member = authorize(request, db, workspace_id, write=True)
     master = load_master_key(request.app.state.settings.credential_key_path)
-    run, created = service.submit(db, workspace_id, member.user_id, body, idempotency_key, master)
+    run, created = service.submit(db, workspace_id, member.user_id, body, idempotency_key, master, raw_catalog=request.app.state.settings.mcp_catalog_json)
     if not created:
         response.status_code = 200
     return service.public_run(run, master)
@@ -76,3 +78,77 @@ def run_events(
         .limit(100)
     ).all()
     return {"items": events}
+
+
+class FeedbackWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    rating: Literal["up", "down"]
+    comment: str = Field(default="", max_length=500)
+
+
+@router.get("/{run_id}/trace")
+def run_trace(workspace_id: uuid.UUID, run_id: uuid.UUID, request: Request, db: Session = Depends(get_db)) -> dict:
+    """The run as a timeline: model calls, skill loads and tool calls with their payloads."""
+    _, member = authorize(request, db, workspace_id)
+    master = load_master_key(request.app.state.settings.credential_key_path)
+    run = service.get_run(db, workspace_id, run_id)
+    return trace.build(db, master, run, service.public_run(run, master), member.user_id)
+
+
+class ToolApprovalDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: Literal["approve", "reject"]
+
+
+@router.post(
+    "/{run_id}/tool-approvals/{approval_id}", dependencies=[Depends(check_csrf)]
+)
+def decide_tool_approval(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    approval_id: uuid.UUID,
+    body: ToolApprovalDecision,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    _, member = authorize(request, db, workspace_id, write=True)
+    master = load_master_key(request.app.state.settings.credential_key_path)
+    from app.modules.executions.agent_approvals import decide
+
+    approval = decide(
+        db,
+        workspace_id,
+        run_id,
+        approval_id,
+        member.user_id,
+        body.decision,
+        master,
+    )
+    run = service.get_run(db, workspace_id, run_id)
+    return {
+        "approval_id": approval.id,
+        "approval_state": approval.state,
+        "run": service.public_run(run, master),
+    }
+
+
+@router.put("/{run_id}/feedback", dependencies=[Depends(check_csrf)])
+def give_feedback(workspace_id: uuid.UUID, run_id: uuid.UUID, body: FeedbackWrite, request: Request, db: Session = Depends(get_db)) -> dict:
+    _, member = authorize(request, db, workspace_id)
+    run = service.get_run(db, workspace_id, run_id)
+    row = db.scalar(select(RunFeedback).where(RunFeedback.run_id == run.id, RunFeedback.created_by == member.user_id))
+    if row:
+        row.rating, row.comment = body.rating, body.comment.strip()
+    else:
+        db.add(RunFeedback(workspace_id=workspace_id, run_id=run.id, rating=body.rating, comment=body.comment.strip(), created_by=member.user_id))
+    db.commit()
+    return trace.feedback_summary(db, run, member.user_id)
+
+
+@router.delete("/{run_id}/feedback", dependencies=[Depends(check_csrf)])
+def remove_feedback(workspace_id: uuid.UUID, run_id: uuid.UUID, request: Request, db: Session = Depends(get_db)) -> dict:
+    _, member = authorize(request, db, workspace_id)
+    run = service.get_run(db, workspace_id, run_id)
+    db.execute(delete(RunFeedback).where(RunFeedback.run_id == run.id, RunFeedback.created_by == member.user_id))
+    db.commit()
+    return trace.feedback_summary(db, run, member.user_id)
