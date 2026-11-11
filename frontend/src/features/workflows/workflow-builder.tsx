@@ -875,6 +875,36 @@ export function WorkflowBuilder({
       join: "all",
       policy: { timeout_seconds: 60, max_attempts: 1 },
     };
+    const insertsSwitch = type === "switch" && outgoing.length === 1 && !!next;
+    const hasOtherPredecessors =
+      !!next &&
+      edges.some(
+        (edge) => edge.target === next.id && edge.id !== outgoing[0]?.id,
+      );
+    const continuationRequiresAll =
+      next &&
+      next.data.definition.type !== "result" &&
+      (next.data.definition.type === "merge"
+        ? next.data.definition.config.mode === "all"
+        : next.data.definition.join === "all");
+    // Collapse the exclusive routes before a shared all-join, retaining its other prerequisites.
+    const continuationMerge: GraphNode | undefined =
+      insertsSwitch &&
+      continuationRequiresAll &&
+      (hasOtherPredecessors || next.data.definition.type === "merge")
+        ? {
+            id: `merge-${crypto.randomUUID().slice(0, 8)}`,
+            type: "merge",
+            label: "Merge paths",
+            config: { mode: "active" },
+            join: "active",
+            position: {
+              x: (definition.position.x + next.position.x) / 2,
+              y: next.position.y + 80,
+            },
+            policy: { timeout_seconds: 60, max_attempts: 1 },
+          }
+        : undefined;
     setNodes((n) => [
       ...n.map((existing) =>
         next?.id === existing.id && existing.data.definition.type === "result"
@@ -891,7 +921,20 @@ export function WorkflowBuilder({
                 },
               },
             }
-          : existing,
+          : next?.id === existing.id &&
+              insertsSwitch &&
+              !hasOtherPredecessors &&
+              !continuationMerge
+            ? {
+                ...existing,
+                data: {
+                  definition: {
+                    ...existing.data.definition,
+                    join: "active" as const,
+                  },
+                },
+              }
+            : existing,
       ),
       {
         id,
@@ -899,6 +942,16 @@ export function WorkflowBuilder({
         position: definition.position,
         data: { definition },
       },
+      ...(continuationMerge
+        ? [
+            {
+              id: continuationMerge.id,
+              type: "flowforge" as const,
+              position: continuationMerge.position,
+              data: { definition: continuationMerge },
+            },
+          ]
+        : []),
     ]);
     if (source && source.data.definition.type !== "result") {
       if (outgoing.length === 1 && next) {
@@ -910,12 +963,25 @@ export function WorkflowBuilder({
             ...outputPorts(definition).map(({ id: branch }) => ({
               id: `edge-${crypto.randomUUID()}`,
               source: id,
-              target: next.id,
+              target: continuationMerge?.id ?? next.id,
               sourceHandle: branch,
               targetHandle: "in",
               type: "smoothstep" as const,
               data: { mappings: [] },
             })),
+            ...(continuationMerge
+              ? [
+                  {
+                    id: `edge-${crypto.randomUUID()}`,
+                    source: continuationMerge.id,
+                    target: next.id,
+                    sourceHandle: "out",
+                    targetHandle: "in",
+                    type: "smoothstep",
+                    data: { mappings: [] },
+                  },
+                ]
+              : []),
           ]);
         } else {
           setEdges((current) =>

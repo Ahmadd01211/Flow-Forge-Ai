@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "input_schema": {},
+  "output_schema": {},
+  "limits": {
+    "timeout_seconds": 60,
+    "max_cost_usd": "0.10",
+    "max_parallel_steps": 2
+  },
+  "nodes": [
+    {
+      "id": "input",
+      "type": "manual_input",
+      "label": "Input",
+      "config": {},
+      "join": "all",
+      "policy": {},
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "cleanup",
+      "type": "list_deduplicate",
+      "label": "Cleanup",
+      "config": {
+        "source": "/items"
+      },
+      "join": "active",
+      "policy": {},
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "result",
+      "type": "result",
+      "label": "Result",
+      "config": {},
+      "join": "all",
+      "policy": {},
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "switch-inserted",
+      "type": "switch",
+      "label": "Switch",
+      "config": {
+        "value": {
+          "kind": "input",
+          "pointer": "/route"
+        },
+        "cases": [
+          {
+            "id": "case-inserted",
+            "label": "Case 1",
+            "value": "match"
+          }
+        ]
+      },
+      "join": "all",
+      "policy": {
+        "timeout_seconds": 60,
+        "max_attempts": 1
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "input-out-switch-inserted",
+      "source": "input",
+      "source_port": "out",
+      "target": "switch-inserted",
+      "target_port": "in",
+      "mappings": []
+    },
+    {
+      "id": "cleanup-out-result",
+      "source": "cleanup",
+      "source_port": "out",
+      "target": "result",
+      "target_port": "in",
+      "mappings": []
+    },
+    {
+      "id": "switch-inserted-case-inserted-cleanup",
+      "source": "switch-inserted",
+      "source_port": "case-inserted",
+      "target": "cleanup",
+      "target_port": "in",
+      "mappings": []
+    },
+    {
+      "id": "switch-inserted-default-cleanup",
+      "source": "switch-inserted",
+      "source_port": "default",
+      "target": "cleanup",
+      "target_port": "in",
+      "mappings": []
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   cleanup,
   fireEvent,
@@ -9,6 +11,16 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkflowBuilder } from "./workflow-builder";
 import type { Graph, Workflow } from "@/lib/api/types";
+// Read only in Vitest; the frontend Docker build does not include backend test artifacts.
+const continuation = JSON.parse(
+  readFileSync(
+    resolve(
+      process.cwd(),
+      "../backend/tests/fixtures/builder-switch-continuation.json",
+    ),
+    "utf8",
+  ),
+) as Graph;
 
 const graph: Graph = {
   schema_version: 1,
@@ -115,10 +127,10 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-const mount = () =>
+const mount = (draft: Graph = graph) =>
   render(
     <WorkflowBuilder
-      workflow={workflow}
+      workflow={{ ...workflow, graph: draft }}
       agentOptions={[]}
       mcpOptions={[]}
       httpOptions={[]}
@@ -130,6 +142,152 @@ const mount = () =>
   );
 
 describe("Switch builder integration", () => {
+  it("saves an executable continuation matching the backend preview fixture", async () => {
+    const linear = structuredClone(continuation) as Graph;
+    linear.nodes = linear.nodes.filter((node) => node.type !== "switch");
+    linear.nodes.find((node) => node.id === "cleanup")!.join = "all";
+    linear.edges = [
+      {
+        id: "incoming",
+        source: "input",
+        source_port: "out",
+        target: "cleanup",
+        target_port: "in",
+        mappings: [],
+      },
+      {
+        id: "outgoing",
+        source: "cleanup",
+        source_port: "out",
+        target: "result",
+        target_port: "in",
+        mappings: [],
+      },
+    ];
+    mount(linear);
+    fireEvent.click(screen.getByTitle(/Add Switch/));
+    fireEvent.change(screen.getByLabelText("Value to route field path"), {
+      target: { value: "/route" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saved).toBeDefined());
+    const inserted = saved!.nodes.find((node) => node.type === "switch")!;
+    const caseId = (inserted.config.cases as { id: string }[])[0].id;
+    const stableId = (id: string) =>
+      id === inserted.id
+        ? "switch-inserted"
+        : id === caseId
+          ? "case-inserted"
+          : id;
+    const normalized = {
+      ...saved,
+      nodes: saved!.nodes.map((node) => ({
+        ...node,
+        id: stableId(node.id),
+        position: { x: 0, y: 0 },
+        config:
+          node.type === "switch"
+            ? {
+                ...node.config,
+                cases: (node.config.cases as { id: string }[]).map((item) => ({
+                  ...item,
+                  id: stableId(item.id),
+                })),
+              }
+            : node.config,
+      })),
+      edges: saved!.edges.map((edge) => ({
+        ...edge,
+        source: stableId(edge.source),
+        source_port: stableId(edge.source_port),
+        target: stableId(edge.target),
+        id: `${stableId(edge.source)}-${stableId(edge.source_port)}-${stableId(edge.target)}`,
+      })),
+    };
+    // The backend test previews this same artifact for both matching and default routes.
+    expect(normalized).toEqual(continuation);
+  });
+  it("keeps an unrelated all-join behind an explicit active-path merge", async () => {
+    const draft = structuredClone(continuation) as Graph;
+    draft.nodes = draft.nodes.filter((node) => node.type !== "switch");
+    const cleanup = draft.nodes.find((node) => node.id === "cleanup")!;
+    cleanup.type = "transform";
+    cleanup.config = { fields: { joined: { kind: "literal", value: true } } };
+    cleanup.join = "all";
+    for (const id of ["lead", "other"])
+      draft.nodes.push({
+        ...structuredClone(cleanup),
+        id,
+        label: id === "lead" ? "Lead" : "Other",
+      });
+    draft.edges = [
+      {
+        id: "first",
+        source: "input",
+        source_port: "out",
+        target: "lead",
+        target_port: "in",
+        mappings: [],
+      },
+      {
+        id: "parallel",
+        source: "input",
+        source_port: "out",
+        target: "other",
+        target_port: "in",
+        mappings: [],
+      },
+      {
+        id: "incoming",
+        source: "lead",
+        source_port: "out",
+        target: "cleanup",
+        target_port: "in",
+        mappings: [],
+      },
+      {
+        id: "other",
+        source: "other",
+        source_port: "out",
+        target: "cleanup",
+        target_port: "in",
+        mappings: [],
+      },
+      {
+        id: "outgoing",
+        source: "cleanup",
+        source_port: "out",
+        target: "result",
+        target_port: "in",
+        mappings: [],
+      },
+    ];
+    mount(draft);
+    fireEvent.click(screen.getByRole("button", { name: "Steps" }));
+    fireEvent.click(screen.getByRole("button", { name: /Lead.*transform/ }));
+    fireEvent.click(screen.getByTitle(/Add Switch/));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saved).toBeDefined());
+    const inserted = saved!.nodes.find(
+      (node) => node.type === "switch" && node.id !== "route",
+    )!;
+    const merge = saved!.nodes.find((node) => node.type === "merge")!;
+    expect(merge?.config).toEqual({ mode: "active" });
+    expect(saved!.nodes.find((node) => node.id === "cleanup")!.join).toBe(
+      "all",
+    );
+    expect(
+      saved!.edges
+        .filter((edge) => edge.source === inserted.id)
+        .map((edge) => edge.target),
+    ).toEqual([merge.id, merge.id]);
+    expect(saved!.edges.find((edge) => edge.source === merge.id)?.target).toBe(
+      "cleanup",
+    );
+    expect(saved!.edges.find((edge) => edge.id === "other")?.source).toBe(
+      "other",
+    );
+  });
   it("inserts a new Switch with stable case and default connections", async () => {
     mount();
     fireEvent.click(screen.getByTitle(/Add Switch/));
