@@ -57,10 +57,10 @@
 
 **Interfaces:** Add Switch and Remove duplicates to the existing toolbox. Switch editor supports add/remove/reorder/edit labels and scalar values while preserving IDs; removing a case also removes only that case's edge and keeps the remaining case/default routes visible. Default route is always displayed. Graph edges serialize case IDs/default exactly. Remove duplicates exposes source and optional object field selector using current mapping controls. The canvas, node-test result and durable trace display the selected stable port; user labels are looked up from the node definition where available.
 
-- [ ] Add failing tests for ports, stable-ID label edits, removal validation, serialization and type-aware preview path messaging.
-- [ ] Run focused tests to confirm failures.
-- [ ] Implement forms, palette entries, output handles, labels and trace presentation.
-- [ ] Run focused tests, typecheck, lint and API drift checks; commit.
+- [x] Add failing tests for ports, stable-ID label edits, removal validation, serialization and type-aware preview path messaging.
+- [x] Run focused tests to confirm failures; initial editor/result tests failed before implementation, and insertion execution regressions reproduced RESULT_SKIPPED before the fix.
+- [x] Implement forms, palette entries, output handles, labels and trace presentation. Switch insertion preserves single-active-branch continuation and all-join prerequisites through a Merge when needed.
+- [x] Focused tests, typecheck, lint, OpenAPI drift checks and production build pass. Task review's Important finding was fixed and independently re-reviewed; commits `181be86`, `899ffb8`.
 
 ### Task 4: Starter recipes and end-to-end regression
 
