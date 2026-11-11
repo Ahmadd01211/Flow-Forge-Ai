@@ -15,7 +15,7 @@ export type McpServerOption = {
   name: string;
   runnable_tools: string[];
   runnable_schemas: Record<string, unknown>;
-  tools?: { name: string; read_only: boolean }[];
+  tools?: { name: string; description?: string; read_only: boolean }[];
 };
 
 /** Provider, verified model and tool grants; shared by the agent editor and workflow LLM steps. */
