@@ -15,6 +15,7 @@ from app.modules.agents.schemas import AgentConfig
 from app.modules.agents.service import validate_schemas
 from app.modules.audit.service import record
 from app.modules.identity.service import check_csrf, current_session
+from app.modules.skills.service import add_starter
 from app.modules.templates.catalog import public_catalog, templates
 from app.modules.templates.models import UserTemplate
 from app.modules.workflows.domain import validate_graph
@@ -55,11 +56,21 @@ def instantiate(
 ):
     _, member = authorize(request, db, workspace_id, write=True)
     item = templates().get(template_key)
+    builtin = item is not None
     if not item:
         row = accessible(template_key, request, db)
         item = {**summary(row, member.user_id), **deepcopy(row.definition)}
+    skill_ids = []
     if item["kind"] == "agent":
-        config = AgentConfig.model_validate(deepcopy(item["config"])).model_dump()
+        raw_config = deepcopy(item["config"])
+        # Only reviewed static recipes may name starter skills. Each helper flush
+        # participates in this transaction; any failure rolls everything back.
+        for key in item.get("starter_skills", []) if builtin else []:
+            skill = add_starter(db, workspace_id, key, member.user_id)
+            skill_ids.append(skill.id)
+            raw_config.setdefault("skills", []).append({"skill_id": str(skill.id), "name": skill.name})
+            record(db, workspace_id, member.user_id, "skill.created", skill.id, {"starter": key})
+        config = AgentConfig.model_validate(raw_config).model_dump()
         validate_schemas(config)
         row = Agent(
             workspace_id=workspace_id,
@@ -93,7 +104,7 @@ def instantiate(
         },
     )
     db.commit()
-    return {"kind": item["kind"], "id": row.id, "template_key": template_key}
+    return {"kind": item["kind"], "id": row.id, "template_key": template_key, "skill_ids": skill_ids}
 
 
 class TemplateCreate(BaseModel):

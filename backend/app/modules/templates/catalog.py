@@ -1,4 +1,4 @@
-"""Versioned, code-reviewed starter templates copied into private workspace drafts."""
+"""Versioned, code-reviewed starter templates copied into workspace drafts."""
 
 from app.modules.templates.action_starters import action_starters
 from app.modules.templates.approval_starter import approval_starter
@@ -18,14 +18,17 @@ def templates() -> dict[str, dict]:
             "description": "Classify an incoming ticket and explain the priority.",
             "category": "Support",
             "template_version": 1,
+            "starter_skills": ["plain-language"],
             "setup_steps": [
                 "Choose a model in the agent editor and connect its provider under Integrations. A real test run can incur provider charges.",
+                "Review and publish the copied Plain-language replies skill before testing the agent.",
                 "Use the sample ticket below in the Test panel, then adjust the instructions or input/output schemas if needed.",
                 "Save, review readiness, and publish a version before using the agent in chat, a workflow, or a deployment.",
             ],
             "sample_input": {
                 "ticket": "Our payment service is down and customers cannot check out."
             },
+            "expected_result": "A draft urgent priority with a short explanation that checkout is blocked, for human review.",
             "config": {
                 "instructions": "Read the support ticket. Assign urgent only when service is blocked, data is at risk, or a time-critical business process has stopped. Return a short reason grounded in the ticket. Do not invent facts.",
                 "input_schema": {
@@ -52,6 +55,17 @@ def templates() -> dict[str, dict]:
             "description": "Answer a question using only supplied reference material.",
             "category": "Knowledge",
             "template_version": 1,
+            "starter_skills": ["plain-language", "summarise-sources"],
+            "setup_steps": [
+                "Connect a provider under Integrations and choose a model. A real test run can incur provider charges.",
+                "Review and publish the copied Plain-language replies and Summarise with sources skills before testing.",
+                "Supply reference material and a question, then review the sample answer before publishing the agent.",
+            ],
+            "sample_input": {
+                "question": "When is support available?",
+                "context": "Support hours: Monday to Friday, 09:00 to 17:00 UTC.",
+            },
+            "expected_result": "A draft answer stating the supplied support hours, with found_in_context true, for human review.",
             "config": {
                 "instructions": "Answer the user's question using only the supplied context. If the context does not contain the answer, say that the answer is unavailable. Do not cite sources that are not present in the input.",
                 "input_schema": {
@@ -67,6 +81,84 @@ def templates() -> dict[str, dict]:
                         "found_in_context": {"type": "boolean"},
                     },
                     "required": ["answer", "found_in_context"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "customer-reply-draft": {
+            "key": "customer-reply-draft",
+            "kind": "agent",
+            "name": "Customer reply draft",
+            "description": "Draft a customer reply using your brand guidance for a teammate to review.",
+            "category": "Support",
+            "template_version": 1,
+            "starter_skills": ["brand-voice", "polite-refusal"],
+            "setup_steps": [
+                "Connect a provider under Integrations and choose a model. A real test run can incur provider charges.",
+                "Customize the copied Brand voice and Polite refusal skills, then review and publish both before testing.",
+                "Add your brand guidelines and a customer message. Review the draft before sending it yourself.",
+            ],
+            "sample_input": {
+                "customer_message": "Hello, could you let me know the shipping status of my order?",
+                "brand_guidelines": "",
+            },
+            "expected_result": "A polite draft reply asking for the information needed to check shipping, with needs_human true, for human review. No message is sent.",
+            "config": {
+                "instructions": "Draft a helpful customer reply using the supplied brand guidelines. When guidelines are empty, use a neutral, clear tone. Do not invent order details, shipping status, policies or promises. If the request cannot be answered from the supplied information, ask for missing details and set needs_human to true. Flag requests needing judgement or an exception for a human. Return only a draft; do not claim to have sent a message or taken action.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"customer_message": {"type": "string"}, "brand_guidelines": {"type": "string"}},
+                    "required": ["customer_message", "brand_guidelines"],
+                    "additionalProperties": False,
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {"draft_reply": {"type": "string"}, "needs_human": {"type": "boolean"}},
+                    "required": ["draft_reply", "needs_human"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "meeting-action-items": {
+            "key": "meeting-action-items",
+            "kind": "agent",
+            "name": "Meeting action items",
+            "description": "Turn meeting notes into a summary and assigned tasks for review.",
+            "category": "Productivity",
+            "template_version": 1,
+            "starter_skills": ["extract-tables"],
+            "setup_steps": [
+                "Connect a provider under Integrations and choose a model. A real test run can incur provider charges.",
+                "Review and publish the copied Extract tables from text skill before testing.",
+                "Paste meeting notes, then check task owners and missing dates before publishing the agent.",
+            ],
+            "sample_input": {
+                "notes": "Planning meeting: Alex will send the project brief by Friday. Sam will review the budget; no due date was agreed.",
+            },
+            "expected_result": "A draft summary and two action items for human review: Alex sends the project brief by Friday; Sam reviews the budget with an empty due_date because none was agreed.",
+            "config": {
+                "instructions": "Summarise the supplied meeting notes and extract explicit action items. Keep task owners and due dates as written. Use an empty string for a missing owner or due date; never infer or invent one. Do not convert relative dates unless the notes provide enough information. Return a draft for human review, without claiming to have created tasks or contacted anyone.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"notes": {"type": "string"}},
+                    "required": ["notes"],
+                    "additionalProperties": False,
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "summary": {"type": "string"},
+                        "action_items": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {"task": {"type": "string"}, "owner": {"type": "string"}, "due_date": {"type": "string"}},
+                                "required": ["task", "owner", "due_date"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["summary", "action_items"],
                     "additionalProperties": False,
                 },
             },
@@ -185,7 +277,8 @@ def public_catalog() -> dict:
         "items": [
             {
                 key: item[key]
-                for key in ("key", "kind", "name", "description", "category", "template_version")
+                for key in ("key", "kind", "name", "description", "category", "template_version", "starter_skills", "setup_steps", "sample_input", "expected_result")
+                if key in item
             }
             for item in templates().values()
         ]
