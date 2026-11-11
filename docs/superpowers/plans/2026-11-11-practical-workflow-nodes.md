@@ -66,7 +66,7 @@
 
 **Files:** `backend/app/modules/templates/catalog.py` or existing starter modules, workflow template tests, frontend starter/workflow tests.
 
-- [ ] Add one reviewed Switch routing template and one Remove duplicates cleanup template with sample input and expected result.
-- [ ] Test structural validation, preview/runtime result, and compatibility with saved schema-version-1 condition templates.
-- [ ] Run full relevant backend and frontend suites, typecheck, lint and API drift checks; commit.
+- [x] Add one reviewed Switch routing template and one Remove duplicates cleanup template with sample input, expected result and setup/run guidance.
+- [x] Test structural validation, draft preview and durable runtime results, and compatibility with schema-version-1 condition templates; task review approved.
+- [x] Full backend (457 passed) and frontend (90 passed) suites, typecheck, lint, API drift checks, Ruff and production build passed; commit `c852742`.
 
