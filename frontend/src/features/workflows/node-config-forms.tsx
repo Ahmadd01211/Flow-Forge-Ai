@@ -7,6 +7,7 @@ import type { AgentConfig, Connection, GraphNode, ToolOption } from "@/lib/api/t
 import { ModelAndTools, type McpServerOption } from "@/features/agents/model-tools";
 import type { SkillItem } from "@/features/agents/skills-model";
 import type { HttpTool } from "@/features/tools/http-tool-registry";
+import { McpToolPicker } from "./mcp-tool-picker";
 import type { components } from "@/lib/api/generated";
 import {
   OPERATORS,
@@ -1141,44 +1142,20 @@ function McpToolForm({ node, issues, onChange, context }: FormProps) {
     ?.runnable_schemas[toolName];
   return (
     <>
-      <label>
-        Approved MCP tool
-        <select
-          value={`${serverId}:${toolName}`}
-          onChange={(event) => {
-            const [server_id, tool_name] = event.target.value.split(":", 2);
-            onChange({ server_id, tool_name });
-          }}
-        >
-          <option value=":">Choose an allowed MCP tool</option>
-          {context.mcpOptions.flatMap((server) =>
-            server.runnable_tools.map((tool) => (
-              <option
-                key={`${server.id}:${tool}`}
-                value={`${server.id}:${tool}`}
-              >
-                {server.name} · {tool}
-              </option>
-            )),
-          )}
-        </select>
-        <FieldIssues issues={issues} path="config.server_id" />
-        <FieldIssues issues={issues} path="config.tool_name" />
-      </label>
+      <McpToolPicker
+        workspaceId={context.workspaceId}
+        servers={context.mcpOptions}
+        value={{ server_id: serverId, tool_name: toolName }}
+        onChange={onChange}
+      />
+      <FieldIssues issues={issues} path="config.server_id" />
+      <FieldIssues issues={issues} path="config.tool_name" />
       <Hint>
         The workflow pins this connection generation and tool schema when
         published. Changes require a new workflow version.
       </Hint>
       {schema !== undefined && (
         <pre className="tool-output">{JSON.stringify(schema, null, 2)}</pre>
-      )}
-      {!context.mcpOptions.some((server) => server.runnable_tools.length) && (
-        <Link
-          href={`/w/${context.workspaceId}/integrations`}
-          className="text-link"
-        >
-          Connect an approved MCP service
-        </Link>
       )}
     </>
   );

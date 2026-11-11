@@ -37,11 +37,11 @@
 
 **Interfaces:**
 - Consumes: `McpServerOption[]` with `id`, `name`, `runnable_tools`, `runnable_schemas`, and optional tool metadata `{ name, description?, read_only }`.
-- Produces: `mcpToolOptions(servers)` returning options with `serverId`, `serverName`, `toolName`, optional `description`, `readOnly`, and the original input schema; `filterMcpToolOptions(options, query)` returning matching options in stable server/tool order.
+- Produces: `mcpToolOptions(servers)` returning options with `serverId`, `serverName`, `toolName`, optional `description`, `readOnly`, and the original input schema; `filterMcpToolOptions(options, query)` returning matching options in stable server/tool order; `nextMcpToolIndex(current, key, count)` wrapping arrow-key navigation through the visible options; and `mcpToolConfig(option)` returning the persisted `{ server_id, tool_name }` pair.
 
 - [x] **Step 1: Write failing model tests**
 
-Test flattening multiple servers, matching by server/tool/description case-insensitively, retaining all options for an empty query, handling missing descriptions, and excluding tools not listed in `runnable_tools`.
+Test flattening multiple servers, matching by server/tool/description case-insensitively, retaining all options for an empty query, handling missing descriptions, and excluding tools not listed in `runnable_tools`. Test that ArrowDown/ArrowUp navigation wraps through visible options and that selection mapping preserves the exact server ID and tool name.
 
 - [x] **Step 2: Run the focused model tests and confirm the missing-module failure**
 
@@ -65,23 +65,25 @@ Run from `frontend`: `npm run test -- src/features/workflows/mcp-tool-picker-mod
 - Consumes: `mcpToolOptions` and `filterMcpToolOptions` from Task 1, plus the existing `FormContext.mcpOptions` data.
 - Produces: a picker that emits the selected `{ server_id, tool_name }`, renders server-grouped accessible options with read-only/write labels and optional descriptions, and retains a link to Integrations when no runnable options exist.
 
-- [ ] **Step 1: Write failing rendered-component tests**
+- [x] **Step 1: Write failing rendered-component tests**
 
-Render the picker with multiple servers and assert group headings, tool descriptions, read-only/write labels, selected value, filtering, no-match feedback, and the no-tools Integrations link. Assert selection calls back the exact original `{ server_id, tool_name }` pair. Include keyboard interaction coverage for search, moving through results, selecting, and clearing.
+Render the picker with multiple servers and assert group headings, tool descriptions, read-only/write labels, selected value, filtering, no-match feedback, and the no-tools Integrations link. Keep interaction details in pure helpers covered in Task 1 because the current Vitest setup has no DOM test environment; test arrow-key index movement and exact `{ server_id, tool_name }` mapping there, then verify the component exposes combobox/listbox/option semantics in rendered markup.
 
-- [ ] **Step 2: Run focused component tests and verify the picker is missing**
+- [x] **Step 2: Run focused component tests and verify the picker is missing**
 
-- [ ] **Step 3: Implement the keyboard-accessible searchable grouped picker**
+- [x] **Step 3: Implement the keyboard-accessible searchable grouped picker**
 
-Use semantic search input/listbox/option roles or an equivalent accessible pattern with arrow-key navigation, Enter selection, Escape close/clear behavior, and a visible selection. Keep read/write labels informational only.
+Use semantic search input/listbox/option roles or an equivalent accessible pattern with arrow-key navigation, Enter selection, Escape dismissal, an explicit Clear button, and a visible selection. Keep read/write labels informational only.
 
-- [ ] **Step 4: Pass endpoint descriptions and read-only flags through the edit page and replace the current select**
+- [x] **Step 4: Pass endpoint descriptions and read-only flags through the edit page and replace the current select**
 
 Preserve the schema preview, publication-pinning hint, field issues, and selected workflow config shape.
 
-- [ ] **Step 5: Run focused tests, ESLint, and TypeScript typecheck**
+- [x] **Step 5: Run focused tests, ESLint, and TypeScript typecheck**
 
-- [ ] **Step 6: Commit the task**
+- [x] **Step 6: Commit the task**
+
+Implementation note: Vitest has no DOM environment, so keyboard wraparound and config mapping are tested as pure model helpers, while the actual component is checked through React server-rendered semantic markup. ESLint caught and required focus/keyboard semantics on role=option elements; the input remains the active-descendant controller and options also support direct keyboard activation.
 
 ### Task 3: Full verification and manual handoff
 

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterMcpToolOptions, mcpToolOptions } from "./mcp-tool-picker-model";
+import {
+  filterMcpToolOptions,
+  mcpToolConfig,
+  mcpToolOptions,
+  nextMcpToolIndex,
+} from "./mcp-tool-picker-model";
 
 const servers = [
   {
@@ -68,5 +73,31 @@ describe("MCP workflow picker model", () => {
       "ask_wiki_question",
     ]);
     expect(filterMcpToolOptions(options, " ")).toEqual(options);
+  });
+
+  it("wraps active option movement and maps selection to the saved config fields", () => {
+    const options = mcpToolOptions(servers);
+    expect(nextMcpToolIndex(-1, "ArrowDown", options.length)).toBe(0);
+    expect(nextMcpToolIndex(2, "ArrowDown", options.length)).toBe(0);
+    expect(nextMcpToolIndex(0, "ArrowUp", options.length)).toBe(2);
+    expect(nextMcpToolIndex(-1, "ArrowUp", options.length)).toBe(2);
+    expect(nextMcpToolIndex(1, "Enter", options.length)).toBe(1);
+    expect(mcpToolConfig(options[2])).toEqual({
+      server_id: "github-2",
+      tool_name: "create_issue",
+    });
+  });
+
+  it("returns no matches and leaves unavailable permission metadata unknown", () => {
+    const options = mcpToolOptions([
+      {
+        id: "server",
+        name: "Server",
+        runnable_tools: ["tool"],
+        runnable_schemas: { tool: {} },
+      },
+    ]);
+    expect(filterMcpToolOptions(options, "not found")).toEqual([]);
+    expect(options[0].readOnly).toBeNull();
   });
 });

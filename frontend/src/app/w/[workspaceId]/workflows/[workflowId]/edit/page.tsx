@@ -4,6 +4,7 @@ import { WorkflowBuilder } from "@/features/workflows/workflow-builder";
 import type { HttpTool } from "@/features/tools/http-tool-registry";
 import type { components } from "@/lib/api/generated";
 import type { SkillItem } from "@/features/agents/skills-model";
+import type { McpServerOption } from "@/features/agents/model-tools";
 export default async function EditWorkflow({
   params,
 }: {
@@ -14,7 +15,7 @@ export default async function EditWorkflow({
     serverApi<Workflow>(`/workspaces/${workspaceId}/workflows/${workflowId}`),
     serverApi<{ items: { id: string; name: string; number: number; provider: string; model_id: string; tool_keys: string[] }[] }>(`/workspaces/${workspaceId}/agents/workflow-options`),
     serverApi<{ items: { id: string; source_revision: number }[] }>(`/workspaces/${workspaceId}/workflows/${workflowId}/versions`),
-    serverApi<{ items: { id: string; name: string; runnable_tools: string[]; runnable_schemas: Record<string, unknown>; tools?: { name: string; read_only: boolean }[] }[] }>(`/workspaces/${workspaceId}/mcp`),
+    serverApi<{ items: McpServerOption[] }>(`/workspaces/${workspaceId}/mcp`),
     serverApi<{ items: ToolOption[] }>(`/workspaces/${workspaceId}/tools`),
     serverApi<{ items: HttpTool[] }>(`/workspaces/${workspaceId}/http-tools`),
     serverApi<components["schemas"]["WorkflowCallOptions"]>(`/workspaces/${workspaceId}/workflows/call-options?exclude_workflow_id=${workflowId}`),

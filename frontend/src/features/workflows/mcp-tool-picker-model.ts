@@ -5,7 +5,7 @@ export type McpToolOption = {
   serverName: string;
   toolName: string;
   description?: string;
-  readOnly: boolean;
+  readOnly: boolean | null;
   schema: unknown;
 };
 
@@ -18,7 +18,7 @@ export function mcpToolOptions(servers: McpServerOption[]): McpToolOption[] {
         serverName: server.name,
         toolName,
         description: metadata?.description?.trim() || undefined,
-        readOnly: metadata?.read_only ?? false,
+        readOnly: metadata?.read_only ?? null,
         schema: server.runnable_schemas[toolName],
       };
     }),
@@ -36,4 +36,22 @@ export function filterMcpToolOptions(
       .filter(Boolean)
       .some((value) => value!.toLocaleLowerCase().includes(normalized)),
   );
+}
+
+export function nextMcpToolIndex(
+  current: number,
+  key: string,
+  count: number,
+): number {
+  if (count === 0) return -1;
+  if (key === "ArrowDown") return current < 0 ? 0 : (current + 1) % count;
+  if (key === "ArrowUp") return current <= 0 ? count - 1 : current - 1;
+  return current;
+}
+
+export function mcpToolConfig(option: McpToolOption): {
+  server_id: string;
+  tool_name: string;
+} {
+  return { server_id: option.serverId, tool_name: option.toolName };
 }
