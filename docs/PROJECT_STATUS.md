@@ -48,6 +48,8 @@ Guided workbench verification (11 November 2026): `docker compose --profile test
 
 Guided first-run follow-up (11 November 2026): support-triage template preview now includes setup steps and sample input, covered by `backend/tests/test_templates.py`. Fresh checks passed: isolated PostgreSQL/Redis suite **334 passed in 109.99s**, Ruff, frontend Vitest **45 tests across 15 files**, ESLint, TypeScript typecheck, API/OpenAPI drift, and Webpack production build. Local Compose is healthy; `/health/ready` returned `{"status":"ready"}`, Alembic reports `0032 (head)`, and `http://localhost:8080` returned HTTP 200. The final browser GUI walkthrough remains for the user; see [guided first run](learning/24-GUIDED-FIRST-RUN.md).
 
+MCP workflow picker (11 November 2026): the workflow **MCP tool** step now searches allowed tools by server, name, or description; groups results by server; and shows the connection's read-only/write metadata. It preserves the existing `{server_id, tool_name}` workflow configuration and permission boundary. Fresh verification passed: frontend Vitest **51 tests across 17 files**, ESLint, TypeScript typecheck, API drift check, and Webpack production build; backend PostgreSQL/Redis suite **334 passed in 215.44s** and Ruff clean. Local Compose readiness returned `{"status":"ready"}`, Alembic reports `0032 (head)`, and the app returned HTTP 200. Final GUI check is left to the user; see the [manual picker walkthrough](learning/25-MCP-TOOL-PICKER.md).
+
 An additional interactive signed-in browser smoke check was not completed in this session because the computer-use browser host was unavailable. Browser-level verification remains outstanding; no provider credentials or real external model calls were used.
 
 Migrations through `0032` are applied locally. Earlier migrations cover templates, examples, automation bindings, usage controls, workflow composition, schedules, tools, approvals and workspace policy; migrations `0026`–`0032` add the guided workbench capabilities listed above. Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
@@ -69,6 +71,7 @@ Workspace owners/admins add MCP servers themselves; the operator catalog is opti
 ## Walkthroughs
 
 - [Guided first run and manual GUI checklist](learning/24-GUIDED-FIRST-RUN.md)
+- [Search and select MCP tools in workflows](learning/25-MCP-TOOL-PICKER.md)
 - [Agent MCP, provider tools and regression evidence](learning/12-AGENT-MCP-AND-REGRESSIONS.md)
 - [Real webhooks and schedules](learning/13-WEBHOOKS-AND-SCHEDULES.md)
 - [Workspace usage and admission limits](learning/14-WORKSPACE-USAGE-LIMITS.md)

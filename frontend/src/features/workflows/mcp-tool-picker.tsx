@@ -22,7 +22,7 @@ export function McpToolPicker({
   onChange: (value: { server_id: string; tool_name: string }) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [open, setOpen] = useState(true);
   const options = useMemo(() => mcpToolOptions(servers), [servers]);
   const filtered = useMemo(
@@ -45,7 +45,7 @@ export function McpToolPicker({
     if (!option) return;
     onChange(mcpToolConfig(option));
     setQuery("");
-    setActiveIndex(0);
+    setActiveIndex(-1);
     setOpen(false);
   }
 
@@ -84,7 +84,7 @@ export function McpToolPicker({
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls="mcp-tool-options"
-        aria-activedescendant={open && filtered.length ? `mcp-tool-option-${activeIndex}` : undefined}
+        aria-activedescendant={open && activeIndex >= 0 ? `mcp-tool-option-${activeIndex}` : undefined}
         placeholder="Search by server, tool, or description"
         value={query}
         onFocus={() => setOpen(true)}
@@ -111,7 +111,10 @@ export function McpToolPicker({
           <button
             type="button"
             className="text-link"
-            onClick={() => onChange({ server_id: "", tool_name: "" })}
+            onClick={() => {
+              onChange({ server_id: "", tool_name: "" });
+              setActiveIndex(-1);
+            }}
           >
             Clear selection
           </button>

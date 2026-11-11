@@ -45,7 +45,7 @@ describe("MCP workflow picker", () => {
     expect(html).toContain("Search repository documentation");
     expect(html).toContain("Read only");
     expect(html).toContain("Can write");
-    expect(html).toContain('aria-activedescendant="mcp-tool-option-0"');
+    expect(html).not.toContain("aria-activedescendant=");
     expect(html).toContain("ask_wiki_question");
   });
 

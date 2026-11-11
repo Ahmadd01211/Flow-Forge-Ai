@@ -96,11 +96,13 @@ Implementation note: Vitest has no DOM environment, so keyboard wraparound and c
 - Consumes: the completed MCP workflow picker and current local Compose stack.
 - Produces: fresh verification evidence and a short user-run GUI checklist.
 
-- [ ] **Step 1: Run frontend Vitest, ESLint, TypeScript typecheck, API drift check, and production build**
-- [ ] **Step 2: Run backend PostgreSQL/Redis suite and Ruff**
-- [ ] **Step 3: Confirm local readiness and migration head**
-- [ ] **Step 4: Record fresh evidence and document manual GUI steps**
-- [ ] **Step 5: Review the diff, commit, and push the current feature branch**
+- [x] **Step 1: Run frontend Vitest, ESLint, TypeScript typecheck, API drift check, and production build**
+- [x] **Step 2: Run backend PostgreSQL/Redis suite and Ruff**
+- [x] **Step 3: Confirm local readiness and migration head**
+- [x] **Step 4: Record fresh evidence and document manual GUI steps**
+- [x] **Step 5: Commit the task, review the branch, and push the current feature branch**
+
+Implementation note: the first review found that Enter at initial focus could select the first tool without a search or arrow-key action. Added a failing rendered-markup assertion, initialized the active index to none, and reran picker tests, lint, typecheck, full Vitest, API drift, and production build successfully.
 
 ## Task graph
 
