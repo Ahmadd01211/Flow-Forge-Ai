@@ -46,6 +46,8 @@ The full PostgreSQL/Redis suite passed 270 tests, including eighteen new composi
 
 Guided workbench verification (11 November 2026): `docker compose --profile test run --rm --build tests` passed **334 tests** in 140.68 seconds; `docker compose --profile test run --rm tests ruff check app tests migrations scripts` reported “All checks passed!”. Frontend Vitest passed **40 tests across 13 files**; ESLint, standalone TypeScript typecheck, API/OpenAPI drift check, and the Webpack production build passed. The first typecheck invocation overlapped the build and read regenerated `.next/types`; it was rerun alone after the build and passed. The local Compose stack reports API healthy, migration `0032 (head)`, `/health/ready` returns `{"status":"ready"}`, and the application root returns HTTP 200 at `http://localhost:8080`.
 
+Guided first-run follow-up (11 November 2026): support-triage template preview now includes setup steps and sample input, covered by `backend/tests/test_templates.py`. Fresh checks passed: isolated PostgreSQL/Redis suite **334 passed in 109.99s**, Ruff, frontend Vitest **45 tests across 15 files**, ESLint, TypeScript typecheck, API/OpenAPI drift, and Webpack production build. Local Compose is healthy; `/health/ready` returned `{"status":"ready"}`, Alembic reports `0032 (head)`, and `http://localhost:8080` returned HTTP 200. The final browser GUI walkthrough remains for the user; see [guided first run](learning/24-GUIDED-FIRST-RUN.md).
+
 An additional interactive signed-in browser smoke check was not completed in this session because the computer-use browser host was unavailable. Browser-level verification remains outstanding; no provider credentials or real external model calls were used.
 
 Migrations through `0032` are applied locally. Earlier migrations cover templates, examples, automation bindings, usage controls, workflow composition, schedules, tools, approvals and workspace policy; migrations `0026`–`0032` add the guided workbench capabilities listed above. Existing immutable version JSON/hashes and encrypted evidence are preserved. New child scopes retain their original budget/deadline through recovery; older completed runs have no retroactively generated step input.
@@ -66,6 +68,7 @@ Workspace owners/admins add MCP servers themselves; the operator catalog is opti
 
 ## Walkthroughs
 
+- [Guided first run and manual GUI checklist](learning/24-GUIDED-FIRST-RUN.md)
 - [Agent MCP, provider tools and regression evidence](learning/12-AGENT-MCP-AND-REGRESSIONS.md)
 - [Real webhooks and schedules](learning/13-WEBHOOKS-AND-SCHEDULES.md)
 - [Workspace usage and admission limits](learning/14-WORKSPACE-USAGE-LIMITS.md)

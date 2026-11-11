@@ -4,6 +4,8 @@ An independent AI agent builder and workflow automation platform.
 
 Agent authoring: guided schema fields, tool argument/permission inspection, publication readiness checks and versioned output-token ceilings are available in the editor. See [agent-builder walkthrough](docs/learning/11-AGENT-BUILDER.md).
 
+Guided first run: start from Overview → **Choose a task**, preview the recommended support-triage agent, and follow the [manual first-run checklist](docs/learning/24-GUIDED-FIRST-RUN.md). Live model runs require your provider key and may incur charges.
+
 User templates: save a draft in the agent editor or visual workflow builder, then choose **Save as template**. Enter a name, description and category; access defaults to **Only me**. Choose workspace members or everyone signed in to share. The Templates gallery supports previews, independent editable copies, and creator-controlled sharing changes. Revoking sharing blocks future access and copies; existing copies remain independent. Review instructions and fixed values before sharing. Stored credentials are excluded, and copied agent, MCP, HTTP and trigger steps require configuration. Database migration `0016` is required; the normal Docker Compose startup applies it.
 
 Provider capabilities: Integrations now shows backend-owned execution/tool support and estimated token rates for 11 reviewed model IDs across the five providers. Refresh a model list using the saved key without rotating it. Other provider-listed models remain labeled setup only. See [supported scope and provider sources](docs/learning/10-PROVIDER-CAPABILITIES.md).

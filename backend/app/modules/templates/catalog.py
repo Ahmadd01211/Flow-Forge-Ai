@@ -18,6 +18,14 @@ def templates() -> dict[str, dict]:
             "description": "Classify an incoming ticket and explain the priority.",
             "category": "Support",
             "template_version": 1,
+            "setup_steps": [
+                "Choose a model in the agent editor and connect its provider under Integrations. A real test run can incur provider charges.",
+                "Use the sample ticket below in the Test panel, then adjust the instructions or input/output schemas if needed.",
+                "Save, review readiness, and publish a version before using the agent in chat, a workflow, or a deployment.",
+            ],
+            "sample_input": {
+                "ticket": "Our payment service is down and customers cannot check out."
+            },
             "config": {
                 "instructions": "Read the support ticket. Assign urgent only when service is blocked, data is at risk, or a time-critical business process has stopped. Return a short reason grounded in the ticket. Do not invent facts.",
                 "input_schema": {

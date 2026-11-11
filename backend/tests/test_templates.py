@@ -9,6 +9,12 @@ from tests.conftest import headers, register
 
 def test_templates_create_private_editable_drafts(client, owner, db):
     workspace = owner["workspaces"][0]["id"]
+    preview = client.get("/api/v1/templates/support-triage").json()
+    assert preview["setup_steps"]
+    assert "Integrations" in preview["setup_steps"][0]
+    assert preview["sample_input"] == {
+        "ticket": "Our payment service is down and customers cannot check out."
+    }
     items = client.get("/api/v1/templates").json()["items"]
     assert {item["key"] for item in items} == {
         "support-triage",

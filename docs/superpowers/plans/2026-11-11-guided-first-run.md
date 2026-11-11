@@ -4,7 +4,7 @@
 
 **Goal:** Give a new FlowForge workspace a clear way to start with support-ticket triage or choose a blank agent/workflow, then carry the user into the existing editable, testable authoring flow.
 
-**Architecture:** Add a small workspace task-selection page and link to it from the existing setup view. Reuse the support-triage template and current template preview/instantiation APIs; keep task-to-route selection in a pure frontend module that can be tested without rendering the application. The current workflow graph, validation, publication, run, and trace modules remain authoritative.
+**Architecture:** Add a small workspace task-selection page and link to it from the existing setup view. Reuse the support-triage template and current template preview/instantiation APIs; keep task-to-route selection in a pure frontend module with focused model and rendered-page tests. The current workflow graph, validation, publication, run, and trace modules remain authoritative.
 
 **Tech Stack:** Next.js App Router, React, TypeScript, Vitest, existing FastAPI template endpoints, PostgreSQL-backed immutable versions and durable runs.
 
@@ -26,6 +26,7 @@
 - An unknown or unavailable `focus` query does not hide templates or prevent normal gallery use.
 - A missing provider connection is explained before the user tries to publish or run the template.
 - The setup checklist and task picker remain usable on narrow screens and with keyboard navigation.
+- The workflow list states that agent and branch nodes remain editable drafts while their runtime is completed; the manual guide must not promise those nodes execute.
 
 ---
 
@@ -120,33 +121,37 @@ Keep the deep link presentation-only. Do not instantiate or mutate anything unti
 **Files:**
 - Create: `docs/learning/24-GUIDED-FIRST-RUN.md`
 - Modify: `README.md`
+- Modify: `backend/app/modules/templates/catalog.py`
+- Test: `backend/tests/test_templates.py`
 
 **Interfaces:**
 - Produces a short manual checklist that names the page, action, expected result, and recovery route for each step.
 - Documents the local app URL, account/workspace setup, where to connect a provider, and that a provider call can incur charges.
 
-- [ ] **Step 1: Write the guide against the implemented routes and controls**
+- [x] **Step 1: Write the guide against the implemented routes and controls**
 
-Cover support triage preview, instantiate, edit, connect a provider, test the sample input, validate, publish, run, inspect trace, and create a blank agent/workflow. State explicitly which steps require a provider key and which trigger configuration remains optional.
+Add setup steps and sample input to the support-triage starter. Test that its detail endpoint exposes both fields. Cover preview, instantiate, edit, connect a provider, test the sample input, validate, publish, run, inspect trace, and create a blank agent/workflow. State explicitly which steps require a provider key and which trigger configuration remains optional.
 
-- [ ] **Step 2: Verify every route and UI label against the code**
+- [x] **Step 2: Verify every route and UI label against the code**
 
 Do not describe a local fake run as evidence of a real model call.
 
-- [ ] **Step 3: Link the guide from README and project status**
+- [x] **Step 3: Link the guide from README and project status**
 
-- [ ] **Step 4: Commit the task**
+- [x] **Step 4: Commit the task**
+
+Implementation note: the support-triage preview fields and regression assertion were edited in the same patch, so the focused backend test was green on its first run; no RED observation is claimed. The first attempted host test could not run because pytest is unavailable there, so verification uses the repository's isolated Docker test service.
 
 ### Task 5: Full automated verification and handoff
 
 **Files:**
 - Modify: `docs/PROJECT_STATUS.md`
 
-- [ ] **Step 1: Run frontend Vitest, ESLint, TypeScript typecheck, API drift check, and production build**
-- [ ] **Step 2: Run the isolated PostgreSQL/Redis backend suite and Ruff**
-- [ ] **Step 3: Confirm local Compose readiness and migration head**
-- [ ] **Step 4: Record only fresh verification evidence in project status**
-- [ ] **Step 5: Prepare the user’s GUI smoke checklist as the final manual review**
+- [x] **Step 1: Run frontend Vitest, ESLint, TypeScript typecheck, API drift check, and production build**
+- [x] **Step 2: Run the isolated PostgreSQL/Redis backend suite and Ruff**
+- [x] **Step 3: Confirm local Compose readiness and migration head**
+- [x] **Step 4: Record only fresh verification evidence in project status**
+- [x] **Step 5: Prepare the user’s GUI smoke checklist as the final manual review**
 
 ## Task graph
 
