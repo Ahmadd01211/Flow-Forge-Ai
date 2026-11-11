@@ -785,7 +785,8 @@ label select {
 
 /* Marketing */
 .landing {
-  background: #fff;
+  background: var(--color-background, var(--page));
+  color: var(--color-foreground, var(--text));
 }
 .marketing-nav {
   max-width: 1320px;
@@ -828,13 +829,13 @@ label select {
   font-size: 9px;
   letter-spacing: 0.14em;
   font-weight: 650;
-  color: #79758f;
+  color: var(--muted);
 }
 .hero-label > span {
   width: 6px;
   height: 6px;
   border-radius: 100%;
-  background: #8a70e7;
+  background: var(--color-primary, var(--primary));
 }
 .hero h1 {
   font-size: clamp(44px, 4.4vw, 65px);
@@ -844,13 +845,39 @@ label select {
   margin: 23px 0;
 }
 .hero h1 > span {
-  color: #6553db;
+  color: var(--color-primary, var(--primary));
 }
 .hero-copy > p {
   font-size: 15px;
   line-height: 1.8;
   max-width: 405px;
-  color: #748095;
+  color: var(--muted);
+}
+.hero-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.hero-steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-steps span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--color-primary, var(--primary));
+  font-size: 10px;
 }
 .hero-actions {
   margin-top: 29px;
@@ -877,7 +904,7 @@ label select {
   border: 1px solid #dfe4ee;
   border-radius: 13px;
   overflow: hidden;
-  background: #f8f9fc;
+  background: var(--color-background, var(--page));
   box-shadow:
     0 30px 75px -30px #2b2a5a40,
     0 1px 4px #1b244708;
@@ -885,7 +912,7 @@ label select {
 }
 .visual-toolbar {
   height: 48px;
-  background: #fff;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -1008,6 +1035,14 @@ label select {
   align-items: center;
   gap: 6px;
 }
+.demo-caption {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .marketing-section {
   padding: 80px 40px;
   max-width: 1280px;
@@ -1024,7 +1059,7 @@ label select {
 }
 .section-intro > p {
   margin-top: 16px;
-  color: #8590a3;
+  color: var(--muted);
   font-size: 13px;
 }
 .feature-grid {
@@ -1035,13 +1070,14 @@ label select {
 }
 .feature-grid article {
   padding: 25px;
-  border: 1px solid #e7ebf3;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 11px;
 }
 .feature-top {
   display: flex;
   justify-content: space-between;
-  color: #7b68ce;
+  color: var(--color-primary, var(--primary));
   margin-bottom: 25px;
 }
 .feature-top > span {
@@ -1054,7 +1090,7 @@ label select {
 }
 .feature-grid p {
   font-size: 12px;
-  color: #7c879a;
+  color: var(--muted);
   line-height: 1.8;
 }
 .control-section {
