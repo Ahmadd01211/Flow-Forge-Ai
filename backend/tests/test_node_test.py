@@ -57,6 +57,27 @@ def test_invalid_configuration_and_unknown_steps_are_rejected(client, owner):
     assert _test(client, path, graph, "nope", input={}).status_code == 404
 
 
+def test_switch_and_deduplicate_node_tests_share_preview_behavior(client, owner):
+    workspace = owner["workspaces"][0]["id"]
+    path, graph = _draft(client, workspace,
+        {"id": "choose", "type": "switch", "config": {"value": {"kind": "input", "pointer": "/value"}, "cases": [{"id": "empty", "label": "Empty", "value": None}]}},
+        {"id": "unique", "type": "list_deduplicate", "config": {"source": "/items", "item_pointer": "/id"}},
+    )
+    for value, port in ((None, "empty"), (False, "default")):
+        response = _test(client, path, graph, "choose", input={"value": value})
+        assert response.status_code == 200, response.text
+        assert response.json()["selected_port"] == port
+        assert response.json()["output"] == {"value": value}
+    response = _test(client, path, graph, "unique", input={"items": [{"id": 1}, {"id": 1}, {}, {}]})
+    assert response.status_code == 200, response.text
+    assert response.json()["output"] == {"items": [{"id": 1}, {}, {}], "count": 3, "removed": 1}
+    failed = _test(client, path, graph, "unique", input={"items": [1]}).json()
+    assert failed["status"] == "failed" and failed["error"]["code"] == "LIST_DEDUPLICATE_INPUT_INVALID"
+    graph["nodes"][1]["config"]["cases"].append({"id": "again", "label": "Again", "value": None})
+    invalid = _test(client, path, graph, "choose", input={})
+    assert invalid.status_code == 422 and invalid.json()["error"]["code"] == "NODE_CONFIG_INVALID"
+
+
 def test_result_fields_combine_step_outputs_and_incoming_data(client, owner):
     workspace = owner["workspaces"][0]["id"]
     path, graph = _draft(client, workspace, {"id": "shape", "type": "transform", "config": {

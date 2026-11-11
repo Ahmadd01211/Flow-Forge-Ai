@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator
 from app.core.json_contracts import UNSAFE_NAMES, bounded_json, validate_user_schema
 from app.modules.agents.schemas import AgentConfig
 from app.modules.tools.catalog import CATALOG
+from app.modules.workflows.domain import switch_ports
 
 OPERATORS = ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "exists"]
 ORDERING = {"gt", "gte", "lt", "lte"}
@@ -176,6 +177,26 @@ SCHEMAS: dict[str, dict] = {
         "properties": {"left": REFERENCE, "operator": OPERATOR, "right": REFERENCE},
         "required": ["left", "operator", "right"],
     },
+    "switch": {
+        "type": "object",
+        "properties": {
+            "value": REFERENCE,
+            "cases": {
+                "type": "array", "minItems": 1, "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"},
+                        "label": {"type": "string", "minLength": 1, "maxLength": 40},
+                        "value": {"type": ["string", "number", "boolean", "null"]},
+                    },
+                    "required": ["id", "label", "value"], "additionalProperties": False,
+                },
+                "x-message": "Add between one and eight cases with unique IDs and values.",
+            },
+        },
+        "required": ["value", "cases"],
+    },
     "transform": {
         "type": "object",
         "properties": {
@@ -209,6 +230,14 @@ SCHEMAS: dict[str, dict] = {
         "required": ["source", "operator"],
         "if": {"properties": {"operator": {"const": "exists"}}, "required": ["operator"]},
         "else": {"required": ["value"]},
+    },
+    "list_deduplicate": {
+        "type": "object",
+        "properties": {
+            "source": _pointer("Choose the input field that holds the list, such as /items."),
+            "item_pointer": _pointer("Choose a path inside each object, or omit it to compare whole items."),
+        },
+        "required": ["source"],
     },
     "json_parse": {
         "type": "object",
@@ -309,7 +338,12 @@ def config_issues(
 
 
 def _semantic(kind: str, config: dict, upstream: set[str] | None, always: set[str] | None, error, warn) -> None:
-    if kind == "text_template":
+    if kind == "switch":
+        try:
+            switch_ports(config)
+        except ValueError as exc:
+            error("config.cases", str(exc))
+    elif kind == "text_template":
         placeholders = PLACEHOLDER.findall(config["template"])
         if len(placeholders) > 32:
             error("config.template", "Use at most 32 placeholders.")

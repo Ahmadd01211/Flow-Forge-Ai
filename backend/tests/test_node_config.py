@@ -28,6 +28,10 @@ def _paths(kind: str, config: dict, upstream: set[str] | None = None) -> dict[st
         ("text_template", {"template": "Ticket {{/ticket/id}} is ready."}),
         ("list_filter", {"source": "/items", "item_pointer": "/status", "operator": "eq", "value": "open"}),
         ("list_filter", {"source": "/items", "operator": "exists"}),
+        ("switch", {"value": {"kind": "input", "pointer": "/kind"}, "cases": [{"id": "billing", "label": "Billing", "value": "billing"}]}),
+        ("switch", {"value": {"kind": "literal", "value": None}, "cases": [{"id": "empty", "label": "Empty", "value": None}]}),
+        ("list_deduplicate", {"source": "/items"}),
+        ("list_deduplicate", {"source": "", "item_pointer": "/user/id"}),
         ("json_parse", {"source": "/text"}),
         ("result", {}),
         ("result", {"value": {"kind": "output", "node_id": "input", "pointer": ""}}),
@@ -119,3 +123,19 @@ def test_run_step_resolves_result_fields():
     }})
     step = run_step(node, {"y": 2}, {"left": {"x": 1}})
     assert step["output"] == {"from_step": 1, "incoming": 2}
+
+
+def test_deduplicate_requires_safe_bounded_source_and_item_paths():
+    assert set(_paths("list_deduplicate", {})) == {"config.source"}
+    for field in ("source", "item_pointer"):
+        for invalid in (None, "items", "/__proto__/id", "/constructor", "/" + "a" * 512):
+            assert set(_paths("list_deduplicate", {"source": "/items", field: invalid})) == {f"config.{field}"}
+
+
+def test_switch_configuration_errors_block_individual_node_tests():
+    assert set(_paths("switch", {})) == {"config.value", "config.cases"}
+    config = {"value": {"kind": "input", "pointer": "invalid"}, "cases": [{"id": "ok", "label": "OK", "value": True}]}
+    assert set(_paths("switch", config)) == {"config.value.pointer"}
+    config["value"] = {"kind": "literal", "value": True}
+    config["cases"].append({"id": "other", "label": "Other", "value": True})
+    assert _paths("switch", config)

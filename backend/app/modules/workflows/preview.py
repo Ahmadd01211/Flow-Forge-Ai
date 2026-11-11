@@ -42,7 +42,7 @@ def _safe_pointer(path: object) -> bool:
 
 
 ENTRY_NODES = {"manual_input", "webhook_trigger", "schedule_trigger", "chat_trigger"}
-LOCAL_NODES = ENTRY_NODES | {"tool", "transform", "condition", "merge", "text_template", "list_filter", "json_parse", "result"}
+LOCAL_NODES = ENTRY_NODES | {"tool", "transform", "condition", "switch", "merge", "text_template", "list_filter", "list_deduplicate", "json_parse", "result"}
 # An inline LLM step is published as a hidden agent version, so it runs and counts as an agent.
 AGENT_NODES = {"agent", "llm"}
 EXTERNAL_NODES = AGENT_NODES | {"mcp_tool", "http_tool"}
@@ -329,8 +329,34 @@ def _resolve(reference: dict, data: object, outputs: dict[str, object]) -> objec
     return _pointer(outputs[source], reference.get("pointer", ""))
 
 
+def _deduplicate(config: dict, data: object) -> dict:
+    items = _pointer(data, config["source"])
+    if not isinstance(items, list):
+        fail(422, "LIST_DEDUPLICATE_INPUT_INVALID", "Remove duplicates needs an array.")
+    selected = []
+    seen: set[str] = set()
+    for item in items:
+        if "item_pointer" in config and not isinstance(item, dict):
+            fail(422, "LIST_DEDUPLICATE_INPUT_INVALID", "A field path requires every list item to be an object.")
+        try:
+            value = _pointer(item, config["item_pointer"]) if "item_pointer" in config else item
+        except HTTPException as error:
+            if error.detail.get("code") != "POINTER_MISSING":
+                raise
+            # Missing fields have no identity; each item survives independently.
+            selected.append(item)
+            continue
+        key = _canonical_text(value)
+        if key not in seen:
+            seen.add(key)
+            selected.append(item)
+    return {"items": selected, "count": len(selected), "removed": len(items) - len(selected)}
+
+
 def run_step(node, data: object, outputs: dict[str, object], agent_handler=None, mcp_handler=None, http_handler=None, composition_handler=None, pause_handler=None) -> dict:
     """Run one node on the data arriving at it; `outputs` holds earlier steps' outputs by node ID."""
+    if node.type in {"switch", "list_deduplicate"}:
+        bounded_json(data, max_bytes=65536)
     usage = branch = None
     if node.type in ENTRY_NODES:
         output = data
@@ -379,6 +405,10 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
         right = _value(node.config["right"], data)
         branch = "true" if _compare(left, right, node.config["operator"]) else "false"
         output = data
+    elif node.type == "switch":
+        value = _canonical_text(_value(node.config["value"], data))
+        branch = next((case["id"] for case in node.config["cases"] if _canonical_text(case["value"]) == value), "default")
+        output = data
     elif node.type == "text_template":
         def substitute(match, source=data):
             value = _pointer(source, match.group(1))
@@ -401,6 +431,8 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
             if _compare(value, node.config.get("value"), node.config["operator"]):
                 selected.append(item)
         output = {"items": selected, "count": len(selected)}
+    elif node.type == "list_deduplicate":
+        output = _deduplicate(node.config, data)
     elif node.type == "json_parse":
         source = _pointer(data, node.config["source"])
         if not isinstance(source, str) or len(source.encode()) > 65536:
@@ -419,7 +451,7 @@ def run_step(node, data: object, outputs: dict[str, object], agent_handler=None,
     step = {"node_id": node.id, "type": node.type, "status": "completed", "output": output}
     if node.type in AGENT_NODES:
         step["usage"] = usage
-    if node.type == "condition":
+    if node.type in {"condition", "switch"}:
         step["selected_port"] = branch
     return step
 
