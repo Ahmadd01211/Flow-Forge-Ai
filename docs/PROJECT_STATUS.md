@@ -57,6 +57,8 @@ The final signed-in GUI walkthrough and real-provider acceptance remain for the 
 
 ## Final verification of practical nodes and website refresh
 
+Local deployment verification (12 November 2026): the running API initially exposed the older 20-node image. Rebuilt and restarted the Compose application services from the completed source with `docker compose up -d --build`. The running API now exposes **22 node types and 15 recipes**, includes Switch and Remove duplicates, and reports Alembic `0033 (head)`. The public local readiness endpoint returned `ready`, and `http://localhost:8080` returned HTTP 200. API, worker, maintenance and frontend services are running. This is a deployment smoke check, not signed-in GUI or real-provider acceptance.
+
 The combined implementation passed the configured PostgreSQL/Redis backend suite (**457 tests**) and frontend suite (**100 tests across 25 files**). Ruff, frontend lint, TypeScript, backend OpenAPI consistency, frontend generated API consistency and the production build passed. The whole-branch review's sole minor finding, an inaccurate Remove duplicates help-text limit, was corrected in `a29bc57`; the existing focused form tests passed (3 tests), and scoped re-review approved the fix with no remaining findings. These checks do not certify signed-in browser behavior or real-provider generation; use the manual acceptance guide for those remaining checks.
 
 ## Historical verification evidence
