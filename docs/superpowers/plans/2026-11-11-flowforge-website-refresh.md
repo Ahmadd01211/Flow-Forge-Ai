@@ -43,11 +43,11 @@
 
 **Files:** `frontend/src/app/page.tsx`, landing styles in `frontend/src/app/globals.css` or the existing landing stylesheet, related component tests.
 
-- [ ] Add tests for reduced-motion classes/behavior and link/button accessible names.
-- [ ] Run focused tests and confirm failures.
-- [ ] Polish the existing workflow illustration with clear step labels, contrast, focus behavior for interactive controls and a narrow-screen stacked/list presentation. Respect reduced-motion preferences.
-- [ ] Run frontend tests, typecheck, lint and production build. Inspect with browser GUI if available; if unavailable, document the limitation and provide a manual review checklist.
-- [ ] Commit.
+- [x] Add tests for reduced-motion behavior and accessible names/focus behavior.
+- [x] Run focused tests and confirm four intended failures.
+- [x] Polish the existing workflow illustration with clear step labels, verified contrast, visible focus behavior and narrow-screen stacked outcomes. Respect reduced-motion preferences.
+- [x] Run frontend tests (100), typecheck, lint, API drift and production build. No browser walkthrough performed; manual review is assigned to the user as requested.
+- [x] Commit `3773d05`; independent review approved with no findings.
 
 ### Task 3: Manual GUI test guide and product documentation
 
