@@ -5,10 +5,17 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import Link from "next/link";
+import { LaunchChecklist } from "@/features/launch/launch-checklist";
+import {
+  deriveLaunchSteps,
+  launchConfigKey,
+  type SampleEvidence,
+} from "@/features/launch/launch-model";
 import {
   addEdge,
   Background,
@@ -461,6 +468,7 @@ export function WorkflowBuilder({
   connections,
   skillOptions = [],
   initialPublishedVersion,
+  canEdit = true,
 }: {
   workflow: Workflow;
   agentOptions: FormContext["agentOptions"];
@@ -471,6 +479,7 @@ export function WorkflowBuilder({
   connections: ProviderConnection[];
   skillOptions?: FormContext["skillOptions"];
   initialPublishedVersion: string | null;
+  canEdit?: boolean;
 }) {
   const preferredConnection = connections.find(
     (item) => item.state === "active" && item.default_model_id,
@@ -558,6 +567,75 @@ export function WorkflowBuilder({
     [baseline, setBaseline] = useState(snapshot),
     dirty = snapshot !== baseline;
   useUnsavedChanges(dirty);
+  const configKey = launchConfigKey({ name, graph });
+  const currentKey = useRef(configKey);
+  const configGeneration = useRef(0);
+  useLayoutEffect(() => {
+    if (currentKey.current !== configKey) configGeneration.current++;
+    currentKey.current = configKey;
+  }, [configKey]);
+  const [checkedKey, setCheckedKey] = useState<string | null>(null);
+  const [checkedValidation, setCheckedValidation] = useState<Validation | null>(
+    null,
+  );
+  const [checking, setChecking] = useState(false);
+  const [sample, setSample] = useState<SampleEvidence | null>(null);
+  const latestRequest = useRef<string | null>(null);
+  const [evidenceKey, setEvidenceKey] = useState(configKey);
+  if (evidenceKey !== configKey) {
+    setEvidenceKey(configKey);
+    setCheckedKey(null);
+    setSample(null);
+  }
+  useLayoutEffect(() => {
+    latestRequest.current = null;
+  }, [configKey]);
+  useEffect(() => {
+    let hidden = document.visibilityState === "hidden";
+    const visibility = () => {
+      if (document.visibilityState === "hidden") hidden = true;
+      else if (hidden) {
+        hidden = false;
+        configGeneration.current++;
+        latestRequest.current = null;
+        setCheckedKey(null);
+        setSample(null);
+      }
+    };
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
+  function startSample(mode: SampleEvidence["mode"], versionId?: string) {
+    const evidence: SampleEvidence = {
+      requestId: crypto.randomUUID(),
+      configKey,
+      inputKey: launchConfigKey(previewInput),
+      mode,
+      state: "running",
+      versionId,
+    };
+    latestRequest.current = evidence.requestId;
+    setSample(evidence);
+    return evidence;
+  }
+  function finishSample(
+    evidence: SampleEvidence,
+    state: SampleEvidence["state"],
+    runId?: string,
+  ) {
+    if (
+      latestRequest.current === evidence.requestId &&
+      currentKey.current === evidence.configKey
+    )
+      setSample({ ...evidence, state, runId });
+  }
+  function showSample() {
+    setPanel(true);
+    setTimeout(
+      () => document.getElementById("workflow-preview-input")?.focus(),
+      0,
+    );
+  }
   const active = nodes.find((n) => n.id === selected),
     activeKind = kinds.find((k) => k.type === active?.data.definition.type);
   // Positions never affect validity, so dragging does not trigger a check.
@@ -630,15 +708,15 @@ export function WorkflowBuilder({
       active?.data.definition.type === "llm"
         ? `${String(activeConfig.provider)}/${String(activeConfig.model_id || "a model")}`
         : active?.data.definition.type === "agent"
-        ? activeAgent
-          ? `the agent “${activeAgent.name}” v${activeAgent.number} on ${activeAgent.provider}/${activeAgent.model_id}`
-          : "a published agent"
-        : active?.data.definition.type === "mcp_tool"
-          ? `${mcpOptions.find((server) => server.id === activeConfig.server_id)?.name ?? String(activeConfig.server_id)} · ${String(activeConfig.tool_name)}`
-          : active?.data.definition.type === "http_tool"
-            ? (httpOptions.find((tool) => tool.id === activeConfig.tool_id)
-                ?.url ?? "an approved HTTP API")
-            : null,
+          ? activeAgent
+            ? `the agent “${activeAgent.name}” v${activeAgent.number} on ${activeAgent.provider}/${activeAgent.model_id}`
+            : "a published agent"
+          : active?.data.definition.type === "mcp_tool"
+            ? `${mcpOptions.find((server) => server.id === activeConfig.server_id)?.name ?? String(activeConfig.server_id)} · ${String(activeConfig.tool_name)}`
+            : active?.data.definition.type === "http_tool"
+              ? (httpOptions.find((tool) => tool.id === activeConfig.tool_id)
+                  ?.url ?? "an approved HTTP API")
+              : null,
     testBlocked =
       activeIssues.find(
         (issue) =>
@@ -1060,6 +1138,7 @@ export function WorkflowBuilder({
     setSelected(null);
   }
   async function save(): Promise<Workflow | null> {
+    if (!canEdit) return null;
     setBusy(true);
     setError("");
     try {
@@ -1088,6 +1167,9 @@ export function WorkflowBuilder({
     }
   }
   async function validate() {
+    if (!canEdit) return;
+    const submittedKey = configKey;
+    const submittedGeneration = configGeneration.current;
     setPanel(true);
     let currentRevision = revision;
     if (dirty) {
@@ -1095,6 +1177,8 @@ export function WorkflowBuilder({
       if (!saved) return;
       currentRevision = saved.revision;
     }
+    setCheckedKey(null);
+    setChecking(true);
     setBusy(true);
     setError("");
     try {
@@ -1105,14 +1189,23 @@ export function WorkflowBuilder({
           body: JSON.stringify({ expected_revision: currentRevision }),
         },
       );
-      setValidation(result);
+      if (
+        currentKey.current === submittedKey &&
+        configGeneration.current === submittedGeneration
+      ) {
+        setValidation(result);
+        setCheckedValidation(result);
+        setCheckedKey(submittedKey);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Validation unavailable.");
     } finally {
+      setChecking(false);
       setBusy(false);
     }
   }
   async function preview() {
+    if (!canEdit) return;
     setPanel(true);
     setPreviewResult(null);
     let parsed: unknown;
@@ -1132,6 +1225,7 @@ export function WorkflowBuilder({
       if (!saved) return;
       currentRevision = saved.revision;
     }
+    const evidence = startSample("local_preview");
     setBusy(true);
     setError("");
     try {
@@ -1154,8 +1248,14 @@ export function WorkflowBuilder({
           }),
         },
       );
-      setPreviewResult(result);
+      if (
+        currentKey.current === evidence.configKey &&
+        latestRequest.current === evidence.requestId
+      )
+        setPreviewResult(result);
+      finishSample(evidence, "completed");
     } catch (cause) {
+      finishSample(evidence, "failed");
       setError(
         cause instanceof Error ? cause.message : "Preview could not run.",
       );
@@ -1164,6 +1264,9 @@ export function WorkflowBuilder({
     }
   }
   async function publish() {
+    if (!canEdit) return;
+    const submittedKey = configKey;
+    const submittedGeneration = configGeneration.current;
     let currentRevision = revision;
     if (dirty) {
       const saved = await save();
@@ -1180,6 +1283,11 @@ export function WorkflowBuilder({
           body: JSON.stringify({ expected_revision: currentRevision }),
         },
       );
+      if (
+        currentKey.current !== submittedKey ||
+        configGeneration.current !== submittedGeneration
+      )
+        return;
       setPublishedVersion(version.id);
       setDurableRun(null);
     } catch (cause) {
@@ -1191,7 +1299,7 @@ export function WorkflowBuilder({
     }
   }
   async function runPublished() {
-    if (!publishedVersion) return;
+    if (!canEdit || !publishedVersion || dirty) return;
     let parsed: unknown;
     try {
       parsed = JSON.parse(previewInput);
@@ -1203,6 +1311,7 @@ export function WorkflowBuilder({
       );
       return;
     }
+    const evidence = startSample("published_run", publishedVersion);
     setBusy(true);
     setError("");
     setPanel(true);
@@ -1223,7 +1332,11 @@ export function WorkflowBuilder({
         headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ version_id: publishedVersion, input: parsed }),
       });
-      setDurableRun(run);
+      if (
+        currentKey.current === evidence.configKey &&
+        latestRequest.current === evidence.requestId
+      )
+        setDurableRun(run);
       for (
         let i = 0;
         i < 35 && (run.state === "queued" || run.state === "running");
@@ -1231,9 +1344,27 @@ export function WorkflowBuilder({
       ) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         run = await api<typeof run>(`${path}/${run.id}`);
-        setDurableRun(run);
+        if (
+          currentKey.current === evidence.configKey &&
+          latestRequest.current === evidence.requestId
+        )
+          setDurableRun(run);
       }
+      finishSample(
+        evidence,
+        run.state === "completed"
+          ? "completed"
+          : ["waiting", "pending_approval"].includes(run.state)
+            ? "waiting"
+            : run.state === "failed"
+              ? "failed"
+              : run.state === "cancelled"
+                ? "cancelled"
+                : "unknown",
+        run.id,
+      );
     } catch (cause) {
+      finishSample(evidence, "failed");
       setError(cause instanceof Error ? cause.message : "Workflow run failed.");
     } finally {
       setBusy(false);
@@ -1270,7 +1401,10 @@ export function WorkflowBuilder({
             (node) => node.data.definition.type === "chat_trigger",
           ) && (
             <Button asChild variant="outline" size="sm">
-              <Link href={`/w/${workflow.workspace_id}/workflows/${workflow.id}/chat`} title="Chat with the latest published version">
+              <Link
+                href={`/w/${workflow.workspace_id}/workflows/${workflow.id}/chat`}
+                title="Chat with the latest published version"
+              >
                 <MessageSquare size={14} />
                 Chat
               </Link>
@@ -1298,7 +1432,7 @@ export function WorkflowBuilder({
             variant="outline"
             size="sm"
             onClick={save}
-            disabled={busy || !dirty}
+            disabled={!canEdit || busy || !dirty}
           >
             {busy ? (
               <LoaderCircle size={15} className="spin" />
@@ -1311,7 +1445,7 @@ export function WorkflowBuilder({
             variant="outline"
             size="sm"
             onClick={validate}
-            disabled={busy}
+            disabled={!canEdit || busy}
           >
             <ShieldCheck size={15} />
             {dirty ? "Save & validate" : "Validate"}
@@ -1320,7 +1454,9 @@ export function WorkflowBuilder({
             variant="outline"
             size="sm"
             onClick={preview}
-            disabled={busy || blockingErrors > 0 || needsPublishedRun}
+            disabled={
+              !canEdit || busy || blockingErrors > 0 || needsPublishedRun
+            }
             title={
               blockedTitle ||
               (needsPublishedRun
@@ -1335,7 +1471,7 @@ export function WorkflowBuilder({
             variant="outline"
             size="sm"
             onClick={publish}
-            disabled={busy || blockingErrors > 0}
+            disabled={!canEdit || busy || blockingErrors > 0}
             title={
               blockedTitle ||
               "Publish a validated workflow with up to 30 steps and four agent nodes."
@@ -1347,7 +1483,7 @@ export function WorkflowBuilder({
           <Button
             size="sm"
             onClick={runPublished}
-            disabled={busy || !publishedVersion || dirty}
+            disabled={!canEdit || busy || !publishedVersion || dirty}
             title="Run the last version published in this editor."
           >
             <Play size={14} />
@@ -1360,6 +1496,76 @@ export function WorkflowBuilder({
           <ErrorNotice message={error} />
         </div>
       )}
+      <LaunchChecklist
+        steps={deriveLaunchSteps({
+          mode: needsPublishedRun ? "published_run" : "local_preview",
+          saved: true,
+          dirty,
+          canEdit,
+          configKey,
+          latestRequestId: sample?.requestId ?? null,
+          check: checking
+            ? "checking"
+            : checkedKey === configKey
+              ? checkedValidation?.valid
+                ? "passed"
+                : "blocked"
+              : "unchecked",
+          issues:
+            checkedKey === configKey
+              ? (checkedValidation?.errors ?? []).map((issue) => ({
+                  code: issue.code,
+                  message: issue.message,
+                  target: issue.node_id ?? undefined,
+                }))
+              : [],
+          warnings: [],
+          publishedCurrent: !!publishedVersion && !dirty,
+          publishedVersionId: publishedVersion,
+          sample,
+        })}
+        issues={
+          checkedKey === configKey
+            ? (checkedValidation?.errors ?? []).map((issue) => ({
+                code: issue.code,
+                message: issue.message,
+                target: issue.node_id ?? undefined,
+              }))
+            : []
+        }
+        warnings={
+          checkedKey === configKey
+            ? (checkedValidation?.warnings ?? []).map((issue) => ({
+                code: issue.code,
+                message: issue.message,
+              }))
+            : []
+        }
+        canEdit={canEdit}
+        onAction={(action) => {
+          if (busy) return;
+          if (action === "save") void save();
+          else if (action === "check") void validate();
+          else if (action === "publish") void publish();
+          else showSample();
+        }}
+        onIssue={(issue) => {
+          setPanel(true);
+          if (issue.target && nodes.some((node) => node.id === issue.target)) {
+            selectNode(issue.target);
+            setListView(true);
+          } else
+            setTimeout(
+              () =>
+                document
+                  .querySelector<HTMLElement>(
+                    '[aria-label="Workflow validation"]',
+                  )
+                  ?.focus(),
+              0,
+            );
+        }}
+      />
       <div className="builder-workspace">
         <aside className={`node-palette ${paletteOpen ? "mobile-open" : ""}`}>
           <div className="palette-heading">
@@ -1374,8 +1580,8 @@ export function WorkflowBuilder({
           </div>
           <p className="muted">The building blocks of your flow.</p>
           <p className="palette-guidance">
-            Select a step, then add a node to insert it into the path. Save,
-            validate and preview when ready.
+            Select a step, then click a node to add a connected step. No
+            dragging needed. Save, validate and preview when ready.
           </p>
           <div className="search-input">
             <Search size={15} />
@@ -2027,7 +2233,11 @@ export function WorkflowBuilder({
         </aside>
       </div>
       {panel && (
-        <section className="validation-panel" aria-label="Workflow validation">
+        <section
+          className="validation-panel"
+          aria-label="Workflow validation"
+          tabIndex={-1}
+        >
           <div className="validation-heading">
             <div className="row">
               <button className="active" onClick={() => setPanel(true)}>

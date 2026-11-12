@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -110,6 +111,8 @@ beforeEach(() => {
   );
   vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
     if (url.endsWith("/csrf")) return Response.json({ csrf_token: "test" });
+    if (url.endsWith("/preview"))
+      return Response.json({ output: {}, steps: [] });
     if (options?.method === "PATCH") {
       saved = JSON.parse(String(options.body)).graph;
       return Response.json({ ...workflow, graph: saved, revision: 2 });
@@ -127,7 +130,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-const mount = (draft: Graph = graph) =>
+const mount = (draft: Graph = graph, canEdit = true) =>
   render(
     <WorkflowBuilder
       workflow={{ ...workflow, graph: draft }}
@@ -137,6 +140,7 @@ const mount = (draft: Graph = graph) =>
       workflowOptions={[]}
       toolOptions={[]}
       connections={[]}
+      canEdit={canEdit}
       initialPublishedVersion={null}
     />,
   );
@@ -206,6 +210,14 @@ describe("Switch builder integration", () => {
     };
     // The backend test previews this same artifact for both matching and default routes.
     expect(normalized).toEqual(continuation);
+    fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+    await waitFor(() =>
+      expect(screen.getByText("Setup checked.")).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(screen.getByText("Sample succeeded")).toBeTruthy(),
+    );
   });
   it("keeps an unrelated all-join behind an explicit active-path merge", async () => {
     const draft = structuredClone(continuation) as Graph;
@@ -363,4 +375,350 @@ describe("Switch builder integration", () => {
       "route",
     );
   });
+});
+
+it("shows a local launch checklist and opening sample controls never runs anything", async () => {
+  mount();
+  const checklist = screen.getByRole("region", { name: "Launch checklist" });
+  expect(checklist.textContent).toContain("Not tested in this session");
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() =>
+    expect(checklist.textContent).toContain("Setup checked."),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Try a sample" }));
+  expect(screen.getByLabelText("Input JSON")).toBeTruthy();
+  expect(checklist.textContent).toContain("Not tested in this session");
+});
+
+it("local preview records only sample evidence and invalidates it after an edit", async () => {
+  const original = fetch;
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    calls.push(url);
+    if (url.endsWith("/preview"))
+      return Response.json({ output: { count: 1, removed: 1 }, steps: [] });
+    return original(url, options);
+  });
+  const local = structuredClone(graph);
+  local.nodes[1] = {
+    ...local.nodes[1],
+    type: "list_deduplicate",
+    label: "Remove duplicate contacts",
+    config: { items: { kind: "input", pointer: "/items" }, key: "/email" },
+  };
+  local.edges = [local.edges[0], { ...local.edges[1], source_port: "out" }];
+  mount(local);
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+  await waitFor(() =>
+    expect(screen.getByText("Sample succeeded")).toBeTruthy(),
+  );
+  expect(calls.some((url) => url.endsWith("/workflow-runs"))).toBe(false);
+  expect(
+    screen.getByRole("button", { name: "Publish a version" }),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+  expect(screen.queryByText("Setup checked.")).toBeNull();
+});
+
+it("external workflow opens sample input without running, then tracks waiting and matching completion", async () => {
+  const original = fetch;
+  const calls: string[] = [];
+  let state = "waiting";
+  let version = 0;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    calls.push(url);
+    if (url.endsWith("/versions"))
+      return Response.json({ id: `version-${++version}`, number: version });
+    if (url.endsWith("/workflow-runs"))
+      return Response.json({ id: "run-1", state, output: {}, steps: [] });
+    return original(url, options);
+  });
+  const external = structuredClone(graph);
+  external.nodes[1] = {
+    ...external.nodes[1],
+    type: "llm",
+    config: { provider: "openai", model_id: "test" },
+  };
+  mount(external);
+  const titles = Array.from(
+    screen
+      .getByRole("region", { name: "Launch checklist" })
+      .querySelectorAll("summary strong"),
+  ).map((item) => item.textContent);
+  expect(titles).toEqual([
+    "Save your draft",
+    "Check setup",
+    "Publish a version",
+    "Try a sample",
+  ]);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Run",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Publish a version" }));
+  await waitFor(() =>
+    expect(screen.getByText(/Current saved version published/)).toBeTruthy(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Try a sample" }));
+  expect(calls.some((url) => url.endsWith("/workflow-runs"))).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Run" }));
+  await waitFor(() =>
+    expect(screen.getByText("Waiting for approval")).toBeTruthy(),
+  );
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+  state = "completed";
+  fireEvent.click(screen.getByRole("button", { name: "Run" }));
+  await waitFor(() =>
+    expect(screen.getByText("Sample succeeded")).toBeTruthy(),
+  );
+});
+
+it("ignores setup responses after editing away and returning, and reveals unknown diagnostics", async () => {
+  const original = fetch;
+  let resolveCheck!: (response: Response) => void;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    if (url.endsWith("/validate"))
+      return new Promise<Response>((resolve) => {
+        resolveCheck = resolve;
+      });
+    return original(url, options);
+  });
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(resolveCheck).toBeDefined());
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  fireEvent.click(screen.getByTitle("Undo last graph edit"));
+  resolveCheck(
+    Response.json({ valid: true, publishable: true, errors: [], warnings: [] }),
+  );
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Validate",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  expect(screen.queryByText("Setup checked.")).toBeNull();
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) =>
+    url.endsWith("/validate")
+      ? Response.json({
+          valid: false,
+          publishable: false,
+          errors: [
+            {
+              code: "future",
+              node_id: "missing",
+              message: "Unknown node issue",
+            },
+            {
+              code: "known",
+              node_id: "route",
+              message: "Routing needs attention",
+            },
+          ],
+          warnings: [],
+        })
+      : original(url, options),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Review issue: Unknown node issue" }),
+    ).toBeTruthy(),
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Review issue: Unknown node issue" }),
+  );
+  await waitFor(() =>
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Workflow validation",
+    ),
+  );
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Review issue: Routing needs attention",
+    }),
+  );
+  expect(screen.getByRole("heading", { name: "Workflow steps" })).toBeTruthy();
+  expect(
+    document.querySelector(".accessible-node-list .selected")?.textContent,
+  ).toContain("Routing");
+});
+
+it("does not validate after a failed save-and-check", async () => {
+  const original = fetch;
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    calls.push(url);
+    if (options?.method === "PATCH")
+      return Response.json(
+        { error: { message: "Save failed" } },
+        { status: 500 },
+      );
+    return original(url, options);
+  });
+  mount();
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  fireEvent.click(screen.getByRole("button", { name: "Save & validate" }));
+  await waitFor(() => expect(screen.getByText("Save failed")).toBeTruthy());
+  expect(calls.some((url) => url.endsWith("/validate"))).toBe(false);
+  expect(screen.queryByText("Setup checked.")).toBeNull();
+});
+
+it("protects viewer actions without issuing mutation requests", () => {
+  mount(graph, false);
+  expect(
+    (screen.getByRole("button", { name: "Check setup" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(
+    (screen.getByRole("button", { name: "Validate" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  expect(screen.getByText(/You have read-only access/)).toBeTruthy();
+});
+
+it("ignores a preview that finishes after graph edits", async () => {
+  const original = fetch;
+  let finish!: (response: Response) => void;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) =>
+    url.endsWith("/preview")
+      ? new Promise<Response>((resolve) => {
+          finish = resolve;
+        })
+      : original(url, options),
+  );
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  finish(Response.json({ output: { stale: true }, steps: [] }));
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save & validate",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+});
+
+it("leaves polling expiry unknown rather than successful", async () => {
+  const original = fetch;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    if (url.endsWith("/versions"))
+      return Response.json({ id: "version-1", number: 1 });
+    if (url.includes("/workflow-runs"))
+      return Response.json({
+        id: "run-1",
+        state: "running",
+        output: {},
+        steps: [],
+      });
+    return original(url, options);
+  });
+  const external = structuredClone(graph);
+  external.nodes[1] = {
+    ...external.nodes[1],
+    type: "llm",
+    config: { provider: "openai", model_id: "test" },
+  };
+  mount(external);
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Publish a version" }));
+  await waitFor(() =>
+    expect(screen.getByText(/Current saved version published/)).toBeTruthy(),
+  );
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(36000);
+    });
+    expect(screen.getByText("Sample status unknown")).toBeTruthy();
+    expect(screen.queryByText("Sample succeeded")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("discards a durable completion after editing the running graph", async () => {
+  const original = fetch;
+  let finish!: (response: Response) => void;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    if (url.endsWith("/versions"))
+      return Response.json({ id: "v1", number: 1 });
+    if (url.endsWith("/workflow-runs"))
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    return original(url, options);
+  });
+  const external = structuredClone(graph);
+  external.nodes[1] = {
+    ...external.nodes[1],
+    type: "llm",
+    config: { provider: "openai", model_id: "test" },
+  };
+  mount(external);
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Publish a version" }));
+  await waitFor(() =>
+    expect(screen.getByText(/Current saved version published/)).toBeTruthy(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Run" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  finish(
+    Response.json({ id: "run1", state: "completed", output: {}, steps: [] }),
+  );
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save & validate",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+});
+
+it("invalidates session sample and setup evidence after returning to the tab", async () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+  await waitFor(() =>
+    expect(screen.getByText("Sample succeeded")).toBeTruthy(),
+  );
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "hidden",
+  });
+  fireEvent(document, new Event("visibilitychange"));
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "visible",
+  });
+  fireEvent(document, new Event("visibilitychange"));
+  expect(screen.queryByText("Setup checked.")).toBeNull();
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+  expect(screen.getByText("Not tested in this session")).toBeTruthy();
 });

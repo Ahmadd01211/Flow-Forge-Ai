@@ -68,6 +68,9 @@ it("disables mutation actions for viewers and retains result inspection", () => 
       onIssue={vi.fn()}
     />,
   );
+  document.querySelectorAll("details").forEach((detail) => {
+    detail.open = true;
+  });
   for (const name of [
     "Save your draft",
     "Check setup",
@@ -81,4 +84,23 @@ it("disables mutation actions for viewers and retains result inspection", () => 
     (screen.getByRole("button", { name: "View result" }) as HTMLButtonElement)
       .disabled,
   ).toBe(false);
+});
+
+it("keeps all summaries visible while disclosing only the next action", () => {
+  render(
+    <LaunchChecklist
+      steps={steps}
+      issues={[]}
+      warnings={[]}
+      canEdit
+      onAction={vi.fn()}
+      onIssue={vi.fn()}
+    />,
+  );
+  const details = Array.from(document.querySelectorAll("details"));
+  expect(details).toHaveLength(4);
+  expect(details.filter((detail) => detail.open)).toHaveLength(1);
+  expect(details[0].open).toBe(true);
+  fireEvent.click(details[1].querySelector("summary")!);
+  expect(screen.getByText("Explanation 1")).toBeTruthy();
 });

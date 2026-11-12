@@ -22,33 +22,39 @@ export function LaunchChecklist({
   onAction: (action: LaunchAction) => void;
   onIssue: (issue: LaunchIssue) => void;
 }) {
+  const next = steps.find((step) => step.status !== "complete" && step.action);
   return (
     <section className="launch-checklist" aria-label="Launch checklist">
       <h2>Launch checklist</h2>
       <ol className="launch-checklist-steps">
         {steps.map((step) => (
           <li key={step.id} className="launch-checklist-step">
-            <div className="launch-checklist-copy">
-              <strong>{step.title}</strong>
-              <span className="launch-checklist-status">
-                {statuses[step.status]}
-              </span>
+            <details
+              className="launch-checklist-copy"
+              open={step.id === next?.id}
+            >
+              <summary>
+                <strong>{step.title}</strong>
+                <span className="launch-checklist-status">
+                  {statuses[step.status]}
+                </span>
+              </summary>
               <p>{step.description}</p>
-            </div>
-            {step.action && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canEdit && step.action !== "result"}
-                onClick={() => onAction(step.action!)}
-              >
-                {step.action === "result"
-                  ? "View result"
-                  : step.action === "configure"
-                    ? "Configure setup"
-                    : step.title}
-              </Button>
-            )}
+              {step.action && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!canEdit && step.action !== "result"}
+                  onClick={() => onAction(step.action!)}
+                >
+                  {step.action === "result"
+                    ? "View result"
+                    : step.action === "configure"
+                      ? "Configure setup"
+                      : step.title}
+                </Button>
+              )}
+            </details>
           </li>
         ))}
       </ol>

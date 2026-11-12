@@ -4926,3 +4926,8 @@ label select {
  .launch-checklist-step { flex-direction: column; align-items: stretch; gap: 10px; }
  .launch-checklist-status { display: block; margin: 4px 0 0; }
 }
+
+.launch-checklist-copy { width: 100%; }
+.launch-checklist-copy summary { cursor: pointer; min-height: 32px; }
+.launch-checklist-copy summary:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.launch-checklist-copy[open] > .button { margin-top: 8px; }
