@@ -40,3 +40,30 @@ Tests use existing frontend API mocks and the backend continuation fixture; this
 Task 4 can extend the workflow edit server page to pass optional recipe metadata. No connector files, `.agents/`, or generated `frontend/next-env.d.ts` were edited/staged by this task. Those pre-existing local changes remain untouched.
 
 No known implementation blocker remains in this slice.
+
+## Review round 1 fixes
+
+Addressed both findings in `task-3-review-report.md`.
+
+P2: Preview now captures request identity and configuration generation before awaiting a dirty save. After save, it checks generation, configuration key and latest request identity before sending the existing preview POST. Intervening edits (including edit then undo), visibility invalidation or superseding requests stop that preview; completion retains the existing request/key guard. Failed saving clears the preallocated sample identity rather than leaving an unexecuted attempt running. Preview request endpoint, input and expected_revision payload semantics are unchanged.
+
+Added a deferred-PATCH regression: create dirty A, start Preview, edit to B and undo to A while saving is pending, resolve save, then check setup. It asserts no Sample succeeded, Not tested in this session, and zero preview POSTs. Meaningful RED observed before the fix: workflow-builder suite had 1 failed and 16 passed; the failure showed a Sample succeeded paragraph where null was expected.
+
+P3: Replaced the replacement character in the shared checking description with ASCII `Checking setup...`. Added an explicit pending-validation test asserting this visible description before resolving validation.
+
+Final focused verification (from frontend):
+
+`npm test -- src/features/workflows/workflow-builder.test.tsx src/features/workflows/selected-path.test.tsx src/features/launch/launch-model.test.ts src/features/launch/launch-checklist.test.tsx src/features/agents/agent-launch.test.tsx --maxWorkers=2`
+
+Exact summary output:
+
+```text
+Test Files  5 passed (5)
+     Tests  43 passed (43)
+```
+
+`npm run typecheck` passed (tsc --noEmit, exit 0).
+
+`npx eslint src/features/workflows/workflow-builder.tsx src/features/workflows/workflow-builder.test.tsx src/features/launch/launch-model.ts` passed (no diagnostics, exit 0).
+
+`git diff --check` passed. No full suite/build/lint/API run. No protected files staged or changed by this round.

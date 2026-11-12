@@ -1219,13 +1219,26 @@ export function WorkflowBuilder({
       );
       return;
     }
+    const evidence = startSample("local_preview");
+    const submittedGeneration = configGeneration.current;
     let currentRevision = revision;
     if (dirty) {
       const saved = await save();
-      if (!saved) return;
+      if (!saved) {
+        if (latestRequest.current === evidence.requestId) {
+          latestRequest.current = null;
+          setSample(null);
+        }
+        return;
+      }
       currentRevision = saved.revision;
     }
-    const evidence = startSample("local_preview");
+    if (
+      configGeneration.current !== submittedGeneration ||
+      currentKey.current !== evidence.configKey ||
+      latestRequest.current !== evidence.requestId
+    )
+      return;
     setBusy(true);
     setError("");
     try {

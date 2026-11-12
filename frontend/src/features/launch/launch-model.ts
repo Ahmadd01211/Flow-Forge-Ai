@@ -80,7 +80,7 @@ export function deriveLaunchSteps(facts: LaunchFacts): LaunchStep[] {
     description: !clean
       ? "Save and check setup"
       : facts.check === "checking"
-        ? "Checking setup�"
+        ? "Checking setup..."
         : facts.check === "passed"
           ? "Setup checked."
           : facts.check === "setup_only"

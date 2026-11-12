@@ -722,3 +722,58 @@ it("invalidates session sample and setup evidence after returning to the tab", a
   expect(screen.queryByText("Sample succeeded")).toBeNull();
   expect(screen.getByText("Not tested in this session")).toBeTruthy();
 });
+
+it("rejects preview evidence when edits and undo happen during its save", async () => {
+  const original = fetch;
+  let finishSave!: (response: Response) => void;
+  let submitted: { name: string; graph: Graph };
+  const previews: string[] = [];
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+    if (options?.method === "PATCH") {
+      submitted = JSON.parse(String(options.body));
+      return new Promise<Response>((resolve) => {
+        finishSave = resolve;
+      });
+    }
+    if (url.endsWith("/preview")) previews.push(url);
+    return original(url, options);
+  });
+  mount();
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+  await waitFor(() => expect(finishSave).toBeDefined());
+  fireEvent.click(screen.getByTitle(/Add Switch/));
+  fireEvent.click(screen.getByTitle("Undo last graph edit"));
+  finishSave(Response.json({ ...workflow, ...submitted!, revision: 2 }));
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Validate" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+  expect(previews).toHaveLength(0);
+  expect(screen.getByText("Not tested in this session")).toBeTruthy();
+});
+
+it("shows normal checking punctuation while the explicit check is pending", async () => {
+  const original = fetch;
+  let finish!: (response: Response) => void;
+  vi.stubGlobal("fetch", async (url: string, options?: RequestInit) =>
+    url.endsWith("/validate")
+      ? new Promise<Response>((resolve) => {
+          finish = resolve;
+        })
+      : original(url, options),
+  );
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+  await waitFor(() => expect(finish).toBeDefined());
+  expect(screen.getByText("Checking setup...")).toBeTruthy();
+  finish(
+    Response.json({ valid: true, publishable: true, errors: [], warnings: [] }),
+  );
+  await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+});
