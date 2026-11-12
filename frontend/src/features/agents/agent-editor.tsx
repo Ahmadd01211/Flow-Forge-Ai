@@ -249,6 +249,67 @@ export function AgentEditor({
     useState<LaunchFacts["check"]>("unchecked");
   const [sample, setSample] = useState<SampleEvidence | null>(null);
   const latestRequest = useRef<string | null>(null);
+  const [evidenceKey, setEvidenceKey] = useState(configKey);
+  if (evidenceKey !== configKey) {
+    setEvidenceKey(configKey);
+    setSample(null);
+  }
+  useLayoutEffect(() => {
+    latestRequest.current = null;
+  }, [configKey]);
+  const serverDefinitionKey = launchConfigKey(
+    agent && {
+      name: agent.name,
+      description: agent.description,
+      config: agent.config,
+    },
+  );
+  const serverContextKey = launchConfigKey({
+    id: agent?.id,
+    revision: agent?.revision,
+    definition: serverDefinitionKey,
+  });
+  const receivedServerContext = useRef(serverContextKey);
+  const savedDefinition = useRef(serverDefinitionKey);
+  useLayoutEffect(() => {
+    if (!agent || receivedServerContext.current === serverContextKey) return;
+    receivedServerContext.current = serverContextKey;
+    // The resource stays mounted across refreshes. Save acknowledgments preserve
+    // the submitted sample and form; external definitions reconcile with edits.
+    setRevision(agent.revision);
+    if (savedDefinition.current === serverDefinitionKey) return;
+    savedDefinition.current = serverDefinitionKey;
+    const nextInput = JSON.stringify(agent.config.input_schema, null, 2);
+    const nextOutput = JSON.stringify(agent.config.output_schema, null, 2);
+    setBaseline(
+      JSON.stringify({
+        name: agent.name,
+        description: agent.description,
+        config: agent.config,
+        input: nextInput,
+        output: nextOutput,
+      }),
+    );
+    if (dirty) {
+      // Surface an external change while preserving the local draft.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setError(
+        "This agent changed on the server. Your unsaved edits are still here; review them before saving.",
+      );
+    } else {
+      setName(agent.name);
+      setDescription(agent.description);
+      setConfig(agent.config);
+      setInput(nextInput);
+      setOutput(nextOutput);
+    }
+    request.current++;
+    pendingReadiness.current = null;
+    setCheckState("unchecked");
+    setReadiness(null);
+    latestRequest.current = null;
+    setSample(null);
+  }, [agent, dirty, serverContextKey, serverDefinitionKey]);
   function sampleEvent(evidence: SampleEvidence) {
     if (evidence.state === "running")
       latestRequest.current = evidence.requestId;
@@ -396,6 +457,11 @@ export function AgentEditor({
           }),
         },
       );
+      savedDefinition.current = launchConfigKey({
+        name,
+        description,
+        config: result.config,
+      });
       setConfig(result.config);
       setRevision(result.revision);
       setReadiness(null);

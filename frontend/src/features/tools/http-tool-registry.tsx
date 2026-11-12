@@ -612,8 +612,10 @@ export function HttpToolRegistry({
               </details>
             )}
             <p className="node-form-hint">
-              Workspace access is approved. Credentials are only checked when
-              the service receives a request.
+              {tool.state === "active"
+                ? "Workspace access is approved."
+                : "Workspace access is revoked."}{" "}
+              Credentials are only checked when the service receives a request.
             </p>
             <Link className="text-link" href={`/w/${workspaceId}/workflows`}>
               Continue to workflows

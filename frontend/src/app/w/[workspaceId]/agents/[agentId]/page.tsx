@@ -46,7 +46,7 @@ export default async function AgentDetail({
   return (
     <AgentEditor
       recipeSample={recipeSample}
-      key={`${agent.id}-${agent.revision}`}
+      key={agent.id}
       workspaceId={workspaceId}
       agent={agent}
       versions={versions}

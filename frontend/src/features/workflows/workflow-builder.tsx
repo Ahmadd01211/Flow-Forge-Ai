@@ -1331,6 +1331,7 @@ export function WorkflowBuilder({
     setBusy(true);
     setError("");
     setPanel(true);
+    let acceptedRunId: string | undefined;
     try {
       const path = `/workspaces/${workflow.workspace_id}/workflow-runs`;
       let run = await api<{
@@ -1348,6 +1349,7 @@ export function WorkflowBuilder({
         headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ version_id: publishedVersion, input: parsed }),
       });
+      acceptedRunId = run.id;
       if (
         currentKey.current === evidence.configKey &&
         latestRequest.current === evidence.requestId
@@ -1380,7 +1382,7 @@ export function WorkflowBuilder({
         run.id,
       );
     } catch (cause) {
-      finishSample(evidence, "failed");
+      finishSample(evidence, acceptedRunId ? "unknown" : "failed", acceptedRunId);
       setError(cause instanceof Error ? cause.message : "Workflow run failed.");
     } finally {
       setBusy(false);

@@ -9,9 +9,14 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AgentEditor } from "./agent-editor";
 import { TryPanel } from "./try-panel";
+import AgentDetail from "@/app/w/[workspaceId]/agents/[agentId]/page";
 import type { Agent, AgentConfig } from "@/lib/api/types";
-const { mockApi } = vi.hoisted(() => ({ mockApi: vi.fn() }));
+const { mockApi, mockServerApi } = vi.hoisted(() => ({
+  mockApi: vi.fn(),
+  mockServerApi: vi.fn(),
+}));
 vi.mock("@/lib/api/client", () => ({ api: mockApi }));
+vi.mock("@/lib/api/server", () => ({ serverApi: mockServerApi }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),
 }));
@@ -62,6 +67,7 @@ function deferred<T>() {
 }
 beforeEach(() => {
   mockApi.mockReset();
+  mockServerApi.mockReset();
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(cleanup);
@@ -120,6 +126,32 @@ const check = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
   await act(async () => {});
 };
+async function editorElement(source: "editor" | "page", value: Agent) {
+  if (source === "editor") return <AgentEditor agent={value} workspaceId="w" />;
+  mockServerApi.mockImplementation((path: string) =>
+    Promise.resolve(
+      path.endsWith("/agents/a")
+        ? value
+        : path === "/auth/session"
+          ? { workspaces: [{ id: "w", role: "owner" }] }
+          : { items: [], next_cursor: null },
+    ),
+  );
+  return AgentDetail({
+    params: Promise.resolve({ workspaceId: "w", agentId: "a" }),
+    searchParams: Promise.resolve({}),
+  });
+}
+function openPersona() {
+  fireEvent.click(screen.getByRole("button", { name: "Persona" }));
+}
+async function sendSample() {
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "hello" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await act(async () => {});
+}
 it("offers save for unsaved agents without launching", () => {
   render(<AgentEditor workspaceId="w" />);
   fireEvent.click(screen.getByRole("button", { name: "Save your draft" }));
@@ -324,6 +356,159 @@ it("an edit during a sample keeps its historical output without current success"
   expect(
     mockApi.mock.calls.filter(([path]) => path.endsWith("/readiness")),
   ).toHaveLength(1);
+});
+it.each(["completed", "pending"])(
+  "invalidates a %s sample after submitted definition edits and undo",
+  async (state) => {
+    const pending = deferred<unknown>();
+    const result = {
+      run: {
+        id: "before-edit",
+        state: "completed",
+        output: { reply: "historical sample" },
+      },
+    };
+    mockApi.mockImplementation((path: string) =>
+      path.endsWith("/try")
+        ? state === "pending"
+          ? pending.promise
+          : Promise.resolve(result)
+        : Promise.resolve(ready),
+    );
+    render(<AgentEditor agent={agent} workspaceId="w" />);
+    await check();
+    await sendSample();
+    if (state === "completed")
+      expect(screen.getByText("Sample succeeded")).toBeTruthy();
+    openPersona();
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Changed definition" },
+    });
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Help" },
+    });
+    if (state === "pending") await act(async () => pending.resolve(result));
+    await check();
+    expect(screen.getByText("historical sample")).toBeTruthy();
+    expect(screen.queryByText("Sample succeeded")).toBeNull();
+    expect(screen.getByText("Not tested in this session")).toBeTruthy();
+  },
+);
+it.each(["editor", "page"] as const)(
+  "preserves submitted sample and history through an identical save refresh in the %s",
+  async (source) => {
+    const saved = {
+      ...agent,
+      revision: 2,
+      config: { ...config, instructions: "Saved sample settings" },
+    };
+    mockApi.mockImplementation((path: string, options?: RequestInit) =>
+      Promise.resolve(
+        options?.method === "PATCH"
+          ? saved
+          : path.endsWith("/try")
+            ? {
+                run: {
+                  id: "saved-sample",
+                  state: "completed",
+                  output: { reply: "sample before save" },
+                },
+              }
+            : ready,
+      ),
+    );
+    const view = render(await editorElement(source, agent));
+    openPersona();
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: saved.config.instructions },
+    });
+    await sendSample();
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "next unsubmitted input" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await act(async () => {});
+    view.rerender(await editorElement(source, saved));
+    await check();
+    expect(screen.getByText("Sample succeeded")).toBeTruthy();
+    expect(screen.getByText("sample before save")).toBeTruthy();
+    expect((screen.getByLabelText("Message") as HTMLInputElement).value).toBe(
+      "next unsubmitted input",
+    );
+    expect(screen.getByText(/revision 2/)).toBeTruthy();
+  },
+);
+it("reconciles an externally restored definition and clears current sample evidence", async () => {
+  mockApi.mockImplementation((path: string) =>
+    Promise.resolve(
+      path.endsWith("/try")
+        ? {
+            run: {
+              id: "historical",
+              state: "completed",
+              output: { reply: "output before restore" },
+            },
+          }
+        : ready,
+    ),
+  );
+  const view = render(await editorElement("page", agent));
+  await check();
+  await sendSample();
+  expect(screen.getByText("Sample succeeded")).toBeTruthy();
+  view.rerender(
+    await editorElement("page", {
+      ...agent,
+      name: "Restored helper",
+      description: "Restored purpose",
+      revision: 3,
+      config: { ...config, instructions: "Restored instructions" },
+    }),
+  );
+  expect((screen.getByLabelText("Agent name") as HTMLInputElement).value).toBe(
+    "Restored helper",
+  );
+  openPersona();
+  expect((screen.getByLabelText("Instructions") as HTMLTextAreaElement).value).toBe(
+    "Restored instructions",
+  );
+  expect((screen.getByLabelText("What is this agent for?") as HTMLInputElement).value).toBe(
+    "Restored purpose",
+  );
+  await check();
+  expect(screen.queryByText("Sample succeeded")).toBeNull();
+  expect(screen.getByText("Not tested in this session")).toBeTruthy();
+  expect(screen.getByText("output before restore")).toBeTruthy();
+  expect(screen.getByText(/revision 3/)).toBeTruthy();
+});
+it("preserves unsaved edits when a new server definition arrives", async () => {
+  const view = render(await editorElement("page", agent));
+  openPersona();
+  fireEvent.change(screen.getByLabelText("Instructions"), {
+    target: { value: "My unsaved instructions" },
+  });
+  view.rerender(
+    await editorElement("page", {
+      ...agent,
+      revision: 4,
+      config: { ...config, instructions: "Someone else's instructions" },
+    }),
+  );
+  openPersona();
+  expect((screen.getByLabelText("Instructions") as HTMLTextAreaElement).value).toBe(
+    "My unsaved instructions",
+  );
+  expect(screen.getByText(/changed on the server/i)).toBeTruthy();
+  expect(screen.getByText("Unsaved changes")).toBeTruthy();
+  mockApi.mockImplementation((_path: string, options: RequestInit) => {
+    const submitted = JSON.parse(String(options.body));
+    expect(submitted.expected_revision).toBe(4);
+    expect(submitted.config.instructions).toBe("My unsaved instructions");
+    return Promise.resolve({ ...agent, ...submitted, revision: 5 });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await act(async () => {});
+  expect(screen.getByText(/revision 5/)).toBeTruthy();
 });
 it("shares the pending readiness request with publish", async () => {
   const pending = deferred<typeof ready>();

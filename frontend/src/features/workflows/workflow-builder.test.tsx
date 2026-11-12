@@ -674,6 +674,58 @@ it("leaves polling expiry unknown rather than successful", async () => {
   }
 });
 
+it.each(["queued", "running"])(
+  "retains an accepted %s run as unknown when status polling fails",
+  async (state) => {
+    const original = fetch;
+    vi.stubGlobal("fetch", async (url: string, options?: RequestInit) => {
+      if (url.endsWith("/versions"))
+        return Response.json({ id: "version-1", number: 1 });
+      if (url.endsWith("/workflow-runs") && options?.method === "POST")
+        return Response.json({
+          id: "accepted-workflow-run",
+          state,
+          output: null,
+          steps: null,
+          error_code: null,
+          cost_usd: null,
+          uncertain_cost_usd: null,
+          input_tokens: null,
+          output_tokens: null,
+        });
+      if (url.endsWith("/workflow-runs/accepted-workflow-run"))
+        throw new Error("Status connection lost");
+      return original(url, options);
+    });
+    const external = structuredClone(graph);
+    external.nodes[1] = {
+      ...external.nodes[1],
+      type: "llm",
+      config: { provider: "openai", model_id: "test" },
+    };
+    mount(external);
+    fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
+    await waitFor(() => expect(screen.getByText("Setup checked.")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Publish a version" }));
+    await waitFor(() =>
+      expect(screen.getByText(/Current saved version published/)).toBeTruthy(),
+    );
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "Run" }));
+      await act(async () => vi.advanceTimersByTimeAsync(1000));
+      expect(screen.getByText("Sample status unknown")).toBeTruthy();
+      expect(screen.queryByText("Sample failed")).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "Open durable step debugger" }).getAttribute("href"),
+      ).toBe("/w/w/executions?kind=workflows&runId=accepted-workflow-run");
+      expect(screen.getByText("Status connection lost")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
 it("discards a durable completion after editing the running graph", async () => {
   const original = fetch;
   let finish!: (response: Response) => void;
