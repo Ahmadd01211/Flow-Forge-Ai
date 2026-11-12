@@ -1,6 +1,6 @@
 # Guided setup and launch checklist
 
-Status: proposed design for review. The user selected this feature and requested an implementation plan; product implementation is not yet approved.
+Status: approved through the user's implementation request and implemented on `feature/local-release-continuation`. Final review fixes are in `b4b6827`; final verification is recorded in the implementation plan and project status.
 
 ## Purpose
 
@@ -19,7 +19,7 @@ Help a non-coder take one agent or workflow from a recipe to a checked configura
 2. Separate setup wizard. Easier to isolate visually, but creates a second editor and synchronization problems when advanced settings change.
 3. Persistent workspace launch dashboard. Supports cross-session evidence, but needs new aggregation, version matching and persistence contracts. Defer until the editor journey is proven.
 
-The user selected the guided checklist concept. Choosing approach 1 and session-scoped sample evidence is the author's proposal for review, not an already approved user requirement.
+The user selected the guided checklist concept and subsequently requested implementation. Approach 1 and session-scoped sample evidence are the author's implementation choices within that scope.
 
 ## Experience
 
@@ -54,7 +54,7 @@ Readiness responses are scoped to the saved configuration/request. Dirty drafts 
 
 ## Design check
 
-An independent builder check found no material unanswered implementation questions. Contextual placement, session-only evidence and conservative tab-return invalidation remain author-proposed choices for user review.
+An independent builder check found no material unanswered implementation questions. Contextual placement, session-only evidence and conservative tab-return invalidation are the author's implemented choices.
 
 ## Module boundaries
 

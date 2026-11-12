@@ -1,6 +1,6 @@
 # Project status
 
-Date: 12 November 2026 (Asia/Karachi).
+Date: 13 November 2026 (Asia/Karachi).
 
 ## Finish line
 
@@ -59,7 +59,9 @@ The final signed-in GUI walkthrough and real-provider acceptance remain for the 
 
 **Try without a model** prominently routes to the known built-in Remove duplicate contacts recipe. **Continue setup** retains the created draft route and carries the recipe key; editor server pages retrieve only optional source sample/expected metadata through the existing template detail endpoint. Samples initialize the test form, never saved graph/settings, and never auto-run. Missing/custom sample-free, malformed or unavailable metadata leaves the normal editor usable. Copied-skill publication links and the single draft creation action remain.
 
-Task 4 automated verification: six focused frontend suites **60 passed**, standalone TypeScript and scoped ESLint passed. The controller owns final integrated test/lint/API/build and runtime smoke results; those have not been asserted here. Session sample evidence resets on reload and needs fresh review after edits; publication remains separately available without testing. The manual guide covers one agent, local deduplication and the publication/setup order for an external workflow. Signed-in GUI, live-provider generation and external API/MCP acceptance remain unperformed in this slice.
+Final integrated verification (13 November 2026): **169 frontend tests across 32 files** passed, together with TypeScript, ESLint, generated API consistency and the production build. Final review's three Important evidence/refresh findings and one Minor revoked-tool copy issue were corrected in `b4b6827`; scoped re-review approved all four with no new blocking findings. Backend behavior and API contracts were unchanged in this slice, so the earlier backend suite was not repeated. After starting Docker Desktop and Compose, API readiness returned `ready` and the homepage returned HTTP 200.
+
+The compact launch checklist now connects existing Save, Check setup, Try a sample and Publish controls. Connected-step insertion guidance reduces dependence on dragging. MCP test arguments follow the selected server/tool, required inputs gate testing, and optional connection/policy help is expandable. Session sample evidence resets on reload and is invalidated by actual definition changes; identical agent saves preserve history. Unknown outcomes retain accepted run links. The manual guide covers one agent, local deduplication and an external workflow. Signed-in GUI, live-provider generation and external API/MCP acceptance remain unperformed in this slice.
 
 ## Final verification of practical nodes and website refresh
 
