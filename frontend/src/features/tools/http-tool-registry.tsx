@@ -310,7 +310,7 @@ export function HttpToolRegistry({
               </Button>
             </div>
             <p className="node-form-hint">
-              1. Service ? 2. Details ? 3. Approve ? 4. Test ? 5. Workflow
+              1. Service / 2. Details / 3. Approve / 4. Test / 5. Workflow
             </p>
             <section
               className="connector-setup"

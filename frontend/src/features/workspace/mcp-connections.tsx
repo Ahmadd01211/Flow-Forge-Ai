@@ -248,7 +248,7 @@ export function McpConnections({
     <div className="mcp-detail">
       <h3>Add an MCP server</h3>
       <p className="node-form-hint">
-        1. Service ? 2. Details ? 3. Verify ? 4. Test ? 5. Workflow
+        1. Service / 2. Details / 3. Verify / 4. Test / 5. Workflow
       </p>
       <details>
         <summary>Connection help</summary>
