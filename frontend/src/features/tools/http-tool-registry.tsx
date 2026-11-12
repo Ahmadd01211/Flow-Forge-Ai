@@ -309,13 +309,9 @@ export function HttpToolRegistry({
                 Cancel
               </Button>
             </div>
-            <ol aria-label="API setup steps">
-              <li>Choose a service or a custom HTTP API.</li>
-              <li>Enter the endpoint, credentials and input contract.</li>
-              <li>Review permissions and approve workspace access.</li>
-              <li>Optionally test a read-only endpoint with your input.</li>
-              <li>Return to workflows and choose an HTTP API node.</li>
-            </ol>
+            <p className="node-form-hint">
+              1. Service ? 2. Details ? 3. Approve ? 4. Test ? 5. Workflow
+            </p>
             <section
               className="connector-setup"
               aria-label="Guided connector setup"

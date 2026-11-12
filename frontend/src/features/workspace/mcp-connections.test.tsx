@@ -4,6 +4,28 @@ import { afterEach, expect, it, vi } from "vitest";
 import { McpConnections, type McpServer } from "./mcp-connections";
 vi.mock("@/lib/api/client", () => ({ api: vi.fn() }));
 afterEach(cleanup);
+it("keeps connection help collapsed and the primary action visible", () => {
+  render(
+    <McpConnections
+      workspaceId="ws"
+      initial={{ items: [], workspace_servers: true }}
+      canManage
+      canTest
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Add server" }));
+  const help = screen.getByText("Connection help").closest("details")!;
+  expect(help.open).toBe(false);
+  fireEvent.click(
+    screen.getByRole("button", { name: "DeepWiki (public, no token)" }),
+  );
+  expect(screen.getByRole("button", { name: "Add and verify" })).toHaveProperty(
+    "disabled",
+    false,
+  );
+  fireEvent.click(screen.getByText("Connection help"));
+  expect(help.open).toBe(true);
+});
 function server(id: string, field: string): McpServer {
   return {
     id,

@@ -247,18 +247,21 @@ export function McpConnections({
   const addForm = (
     <div className="mcp-detail">
       <h3>Add an MCP server</h3>
-      <ol aria-label="MCP setup steps">
-        <li>Choose a service or use a custom MCP URL.</li>
-        <li>Enter its connection details and token if needed.</li>
-        <li>Add and verify, then review allowed tools.</li>
-        <li>Choose a tool, edit its inputs and run a test when ready.</li>
-        <li>Return to your workflow and choose the connected tool.</li>
-      </ol>
-      <p>
-        Use the server&apos;s Streamable HTTP endpoint on a public HTTPS host.
-        FlowForge lists its tools; only tools the server marks read-only start
-        allowed.
+      <p className="node-form-hint">
+        1. Service ? 2. Details ? 3. Verify ? 4. Test ? 5. Workflow
       </p>
+      <details>
+        <summary>Connection help</summary>
+        <p>
+          Use a public HTTPS Streamable HTTP endpoint. Tokens are stored
+          encrypted. OAuth sign-in is not supported; use a token or a public
+          server.
+        </p>
+        <p>
+          Read-only tools start allowed. Review write tools before enabling
+          them.
+        </p>
+      </details>
       {error && <ErrorNotice message={error} />}
       <div className="mcp-credential">
         <span className="integration-eyebrow">QUICK SETUP</span>
@@ -321,20 +324,23 @@ export function McpConnections({
               />{" "}
               Read-only tools only (recommended to start)
             </label>
-            <p>
-              Create a{" "}
-              <a
-                className="text-link"
-                href="https://github.com/settings/personal-access-tokens/new"
-                target="_blank"
-                rel="noreferrer"
-              >
-                fine-grained personal access token
-              </a>{" "}
-              limited to the repositories this workspace needs, with only the
-              permissions you plan to allow, for example Issues: read, or
-              Issues: read and write. Paste it below; it is stored encrypted.
-            </p>
+            <details>
+              <summary>Get a GitHub token</summary>
+              <p>
+                Create a{" "}
+                <a
+                  className="text-link"
+                  href="https://github.com/settings/personal-access-tokens/new"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  fine-grained personal access token
+                </a>{" "}
+                limited to the repositories this workspace needs, with only the
+                permissions you plan to allow, for example Issues: read, or
+                Issues: read and write. Paste it below; it is stored encrypted.
+              </p>
+            </details>
           </>
         )}
         <label htmlFor="mcp-name">Name</label>
@@ -398,10 +404,6 @@ export function McpConnections({
             Add and verify
           </Button>
         </div>
-        <p>
-          OAuth sign-in is not supported yet; use servers that accept a token or
-          no authentication.
-        </p>
       </div>
     </div>
   );
@@ -412,11 +414,7 @@ export function McpConnections({
         <div>
           <span className="integration-eyebrow">REMOTE CAPABILITIES</span>
           <h2>MCP servers</h2>
-          <p>
-            Connect external tools for agents and workflows. Read-only tools
-            start allowed; write tools stay blocked until an owner or admin
-            allows them.
-          </p>
+          <p>Connect tools for your agents and workflows.</p>
         </div>
         <div className="row">
           <Badge tone="purple">
@@ -492,13 +490,17 @@ export function McpConnections({
                         : "Awaiting connection"}
                     </Badge>
                   </div>
-                  <p>
-                    {server.source === "workspace"
-                      ? `Added by this workspace · ${server.origin}`
-                      : "Reviewed by a platform operator"}
-                    . Remote descriptions and labels come from the server and do
-                    not grant permissions by themselves.
-                  </p>
+                  <details>
+                    <summary>Server details</summary>
+                    <p>
+                      {server.source === "workspace"
+                        ? `Added by this workspace · ${server.origin}`
+                        : "Reviewed by a platform operator"}
+                      . Remote descriptions and labels come from the server and
+                      do not grant permissions by themselves.
+                    </p>{" "}
+                  </details>
+
                   {error && <ErrorNotice message={error} />}
                   {notice && (
                     <div className="integration-notice">
@@ -506,8 +508,10 @@ export function McpConnections({
                     </div>
                   )}
                   {server.state === "active" && (
-                    <div className="mcp-test">
-                      <h4>Tools</h4>
+                    <details className="mcp-test">
+                      <summary>
+                        Tool permissions ({server.tools.length})
+                      </summary>
                       {server.tools.map((item) => {
                         const [kind, tone] = toolKind(item);
                         return (
@@ -554,10 +558,18 @@ export function McpConnections({
                           person should review each action.
                         </p>
                       )}
-                    </div>
+                    </details>
                   )}
                   {canManage && (
-                    <div className="mcp-credential">
+                    <details
+                      className="mcp-credential"
+                      open={server.state !== "active"}
+                    >
+                      <summary>
+                        {server.state === "active"
+                          ? "Credentials and access"
+                          : "Connect server"}
+                      </summary>
                       <label htmlFor="mcp-token">
                         Bearer token{" "}
                         <small>Leave blank for a public server</small>
@@ -597,7 +609,7 @@ export function McpConnections({
                             : "Revoke connection"}
                         </button>
                       )}
-                    </div>
+                    </details>
                   )}
                   {server.state === "active" && (
                     <div className="mcp-test">
@@ -620,7 +632,7 @@ export function McpConnections({
                             ))}
                           </select>
                           {fields.length > 0 && (
-                            <details open>
+                            <details>
                               <summary>Inputs for {tool}</summary>
                               <ul className="mcp-fields">
                                 {fields.map((field) => (
@@ -665,9 +677,7 @@ export function McpConnections({
                             )}
                           </div>
                           <p className="node-form-hint">
-                            Required fields are prefilled as a starting point.
-                            Replace example values before testing; the server
-                            validates the full input contract.
+                            Replace example values before testing.
                           </p>
                           <textarea
                             id="mcp-arguments"
