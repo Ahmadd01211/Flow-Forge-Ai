@@ -55,6 +55,12 @@ Website refresh documentation audit (11 November 2026): source catalog/schema co
 
 The final signed-in GUI walkthrough and real-provider acceptance remain for the user. Follow [noncoder creation checks](manual-testing/noncoder-creation.md) with your own credential through Integrations. No live-provider success is asserted by this documentation update.
 
+## Recipe setup handoff (12 November 2026)
+
+**Try without a model** prominently routes to the known built-in Remove duplicate contacts recipe. **Continue setup** retains the created draft route and carries the recipe key; editor server pages retrieve only optional source sample/expected metadata through the existing template detail endpoint. Samples initialize the test form, never saved graph/settings, and never auto-run. Missing/custom sample-free, malformed or unavailable metadata leaves the normal editor usable. Copied-skill publication links and the single draft creation action remain.
+
+Task 4 automated verification: six focused frontend suites **60 passed**, standalone TypeScript and scoped ESLint passed. The controller owns final integrated test/lint/API/build and runtime smoke results; those have not been asserted here. Session sample evidence resets on reload and needs fresh review after edits; publication remains separately available without testing. The manual guide covers one agent, local deduplication and the publication/setup order for an external workflow. Signed-in GUI, live-provider generation and external API/MCP acceptance remain unperformed in this slice.
+
 ## Final verification of practical nodes and website refresh
 
 Local deployment verification (12 November 2026): the running API initially exposed the older 20-node image. Rebuilt and restarted the Compose application services from the completed source with `docker compose up -d --build`. The running API now exposes **22 node types and 15 recipes**, includes Switch and Remove duplicates, and reports Alembic `0033 (head)`. The public local readiness endpoint returned `ready`, and `http://localhost:8080` returned HTTP 200. API, worker, maintenance and frontend services are running. This is a deployment smoke check, not signed-in GUI or real-provider acceptance.

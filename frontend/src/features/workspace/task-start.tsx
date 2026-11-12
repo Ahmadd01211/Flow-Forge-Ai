@@ -28,11 +28,13 @@ export function TaskStart({ workspaceId }: { workspaceId: string }) {
             <p>{choice.description}</p>
             <Button asChild>
               <Link href={choice.href}>
-                {choice.key === "support-triage"
-                  ? "Preview support triage"
-                  : choice.key === "blank-agent"
-                    ? "Create a blank agent"
-                    : "Open workflows"}
+                {choice.key === "remove-duplicates"
+                  ? "Preview duplicate removal"
+                  : choice.key === "support-triage"
+                    ? "Preview support triage"
+                    : choice.key === "blank-agent"
+                      ? "Create a blank agent"
+                      : "Open workflows"}
                 <ArrowRight size={15} />
               </Link>
             </Button>

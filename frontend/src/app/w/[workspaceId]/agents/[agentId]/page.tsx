@@ -1,3 +1,4 @@
+import { loadRecipeSample } from "@/features/templates/recipe-handoff";
 import { AgentEditor } from "@/features/agents/agent-editor";
 import { serverApi } from "@/lib/api/server";
 import type {
@@ -15,10 +16,20 @@ export default async function AgentDetail({
   searchParams,
 }: {
   params: Promise<{ workspaceId: string; agentId: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; recipe?: string | string[] }>;
 }) {
   const { workspaceId, agentId } = await params;
-  const [agent, versions, session, connections, tools, mcp, http, skillList, query] = await Promise.all([
+  const [
+    agent,
+    versions,
+    session,
+    connections,
+    tools,
+    mcp,
+    http,
+    skillList,
+    query,
+  ] = await Promise.all([
     serverApi<Agent>(`/workspaces/${workspaceId}/agents/${agentId}`),
     serverApi<VersionList>(
       `/workspaces/${workspaceId}/agents/${agentId}/versions`,
@@ -31,8 +42,10 @@ export default async function AgentDetail({
     serverApi<{ items: SkillItem[] }>(`/workspaces/${workspaceId}/skills`),
     searchParams,
   ]);
+  const recipeSample = await loadRecipeSample(query.recipe, "agent", serverApi);
   return (
     <AgentEditor
+      recipeSample={recipeSample}
       key={`${agent.id}-${agent.revision}`}
       workspaceId={workspaceId}
       agent={agent}
@@ -47,7 +60,9 @@ export default async function AgentDetail({
       canEdit={
         session.workspaces.find((w) => w.id === workspaceId)?.role !== "viewer"
       }
-      canManage={["owner", "admin"].includes(session.workspaces.find((w) => w.id === workspaceId)?.role ?? "")}
+      canManage={["owner", "admin"].includes(
+        session.workspaces.find((w) => w.id === workspaceId)?.role ?? "",
+      )}
     />
   );
 }

@@ -109,6 +109,7 @@ describe("guided task start", () => {
     expect(
       startingChoices("/w/ws-123").map(({ key, href }) => [key, href]),
     ).toEqual([
+      ["remove-duplicates", "/w/ws-123/templates?focus=remove-duplicates"],
       ["support-triage", "/w/ws-123/templates?focus=support-triage"],
       ["blank-agent", "/w/ws-123/agents/new"],
       ["blank-workflow", "/w/ws-123/workflows"],

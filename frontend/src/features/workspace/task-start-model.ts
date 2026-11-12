@@ -1,5 +1,6 @@
 export type StartingChoice = {
-  key: "support-triage" | "blank-agent" | "blank-workflow";
+  key:
+    "remove-duplicates" | "support-triage" | "blank-agent" | "blank-workflow";
   title: string;
   description: string;
   href: string;
@@ -7,6 +8,13 @@ export type StartingChoice = {
 
 export function startingChoices(base: string): StartingChoice[] {
   return [
+    {
+      key: "remove-duplicates",
+      title: "Try without a model",
+      description:
+        "Remove duplicate contacts with a ready-to-use sample and expected output. No provider or external connection needed.",
+      href: `${base}/templates?focus=remove-duplicates`,
+    },
     {
       key: "support-triage",
       title: "Support ticket triage",

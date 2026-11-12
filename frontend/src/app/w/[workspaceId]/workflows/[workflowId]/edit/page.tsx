@@ -1,3 +1,4 @@
+import { loadRecipeSample } from "@/features/templates/recipe-handoff";
 import { serverApi } from "@/lib/api/server";
 import type {
   ConnectionList,
@@ -12,7 +13,9 @@ import type { SkillItem } from "@/features/agents/skills-model";
 import type { McpServerOption } from "@/features/agents/model-tools";
 export default async function EditWorkflow({
   params,
+  searchParams,
 }: {
+  searchParams: Promise<{ recipe?: string | string[] }>;
   params: Promise<{ workspaceId: string; workflowId: string }>;
 }) {
   const { workspaceId, workflowId } = await params;
@@ -52,8 +55,15 @@ export default async function EditWorkflow({
     serverApi<{ items: SkillItem[] }>(`/workspaces/${workspaceId}/skills`),
     serverApi<SessionData>("/auth/session"),
   ]);
+  const query = await searchParams;
+  const recipeSample = await loadRecipeSample(
+    query.recipe,
+    "workflow",
+    serverApi,
+  );
   return (
     <WorkflowBuilder
+      recipeSample={recipeSample}
       canEdit={
         session.workspaces.find((w) => w.id === workspaceId)?.role !== "viewer"
       }

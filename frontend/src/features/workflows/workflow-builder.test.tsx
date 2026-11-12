@@ -130,9 +130,10 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-const mount = (draft: Graph = graph, canEdit = true) =>
+const mount = (draft: Graph = graph, canEdit = true, recipeSample?: import("@/features/templates/recipe-handoff").RecipeSample) =>
   render(
     <WorkflowBuilder
+      recipeSample={recipeSample}
       workflow={{ ...workflow, graph: draft }}
       agentOptions={[]}
       mcpOptions={[]}
@@ -146,6 +147,22 @@ const mount = (draft: Graph = graph, canEdit = true) =>
   );
 
 describe("Switch builder integration", () => {
+  it("initializes source sample and expected example without changing the graph or running", () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    mount(graph, true, {sampleInput: {items: ["Ada", "Ada"]}, expectedResult: "One Ada remains."});
+    expect(JSON.parse((screen.getByLabelText("Input JSON") as HTMLTextAreaElement).value)).toEqual({items: ["Ada", "Ada"]});
+    expect(screen.getByText("Expected example: One Ada remains.")).toBeTruthy();
+    expect(screen.getAllByText("Routing workflow").length).toBeGreaterThan(0);
+    expect(saved).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Input JSON"), {target: {value: '{"items":[]}'}});
+    expect((screen.getByLabelText("Input JSON") as HTMLTextAreaElement).value).toBe('{"items":[]}');
+  });
+  it("asks for safe input when recipe metadata is absent", () => {
+    mount();
+    expect((screen.getByLabelText("Input JSON") as HTMLTextAreaElement).value).toBe("{}");
+    expect(screen.getByText(/enter safe sample input/i)).toBeTruthy();
+  });
   it("saves an executable continuation matching the backend preview fixture", async () => {
     const linear = structuredClone(continuation) as Graph;
     linear.nodes = linear.nodes.filter((node) => node.type !== "switch");

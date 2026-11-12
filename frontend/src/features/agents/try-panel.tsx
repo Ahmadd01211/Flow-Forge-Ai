@@ -1,4 +1,5 @@
 "use client";
+import type { RecipeSample } from "@/features/templates/recipe-handoff";
 import { useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
@@ -45,6 +46,7 @@ const DONE = new Set(["completed", "failed", "cancelled"]);
  * not, as a normal budgeted agent run in the agent's hidden playground twin.
  */
 export function TryPanel({
+  recipeSample,
   workspaceId,
   agentId,
   config,
@@ -53,6 +55,7 @@ export function TryPanel({
   configKey,
   onSampleEvent,
 }: {
+  recipeSample?: RecipeSample;
   configKey?: string;
   onSampleEvent?: (evidence: SampleEvidence) => void;
   workspaceId: string;
@@ -67,8 +70,24 @@ export function TryPanel({
     config.input_schema as { properties?: Record<string, unknown> }
   ).properties?.conversation_id;
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [draft, setDraft] = useState("");
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState(() =>
+    typeof recipeSample?.sampleInput?.message === "string"
+      ? recipeSample.sampleInput.message
+      : "",
+  );
+  const [form, setForm] = useState<Record<string, string>>(() => {
+    const sample = recipeSample?.sampleInput;
+    if (!sample) return {};
+    return {
+      __json: JSON.stringify(sample, null, 2),
+      ...Object.fromEntries(
+        Object.entries(sample).map(([key, value]) => [
+          key,
+          typeof value === "string" ? value : JSON.stringify(value),
+        ]),
+      ),
+    };
+  });
   const [conversation, setConversation] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
@@ -363,6 +382,12 @@ export function TryPanel({
         )}
         <div ref={end} />
       </div>
+      {recipeSample?.expectedResult && (
+        <p>Expected example: {recipeSample.expectedResult}</p>
+      )}
+      {recipeSample && !recipeSample.sampleInput && (
+        <p>Enter your own safe sample before testing.</p>
+      )}
       {chat ? (
         <form
           className="try-compose"

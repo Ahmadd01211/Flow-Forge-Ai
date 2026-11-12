@@ -1,4 +1,5 @@
 "use client";
+import type { RecipeSample } from "@/features/templates/recipe-handoff";
 import {
   createContext,
   memo,
@@ -459,6 +460,7 @@ function canvasEdges(graph: Graph): Edge[] {
 }
 
 export function WorkflowBuilder({
+  recipeSample,
   workflow,
   agentOptions,
   mcpOptions,
@@ -470,6 +472,7 @@ export function WorkflowBuilder({
   initialPublishedVersion,
   canEdit = true,
 }: {
+  recipeSample?: RecipeSample;
   workflow: Workflow;
   agentOptions: FormContext["agentOptions"];
   mcpOptions: FormContext["mcpOptions"];
@@ -532,7 +535,7 @@ export function WorkflowBuilder({
     [history, setHistory] = useState<Graph[]>([]),
     [paletteOpen, setPaletteOpen] = useState(false);
   const [previewInput, setPreviewInput] = useState(
-    '{"text":"Hello world","find":"world","replacement":"FlowForge"}',
+    JSON.stringify(recipeSample?.sampleInput ?? {}, null, 2),
   );
   const [previewResult, setPreviewResult] = useState<{
     output: unknown;
@@ -2352,6 +2355,12 @@ export function WorkflowBuilder({
                 steps require publishing and a durable run.
               </small>
             </div>
+            {recipeSample?.expectedResult && (
+              <p>Expected example: {recipeSample.expectedResult}</p>
+            )}
+            {!recipeSample?.sampleInput && (
+              <p>Enter safe sample input for this workflow before testing.</p>
+            )}
             <label htmlFor="workflow-preview-input">Input JSON</label>
             <textarea
               id="workflow-preview-input"

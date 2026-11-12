@@ -58,6 +58,40 @@ function gallery(canCreate = true) {
 }
 
 describe("guided recipes", () => {
+  it("offers a known local demo without treating custom labels as local", () => {
+    render(
+      <TemplateGallery
+        workspaceId="ws-1"
+        templates={[
+          { ...workflow, key: "remove-duplicates" },
+          { ...workflow, key: "custom-copy" },
+        ]}
+        canCreate
+      />,
+    );
+    expect(screen.getAllByText("Try without a model")).toHaveLength(1);
+  });
+  it("keeps imported recipes without samples explicit at handoff", async () => {
+    request
+      .mockResolvedValueOnce(workflow)
+      .mockResolvedValueOnce({ kind: "workflow", id: "wf-import" });
+    gallery();
+    fireEvent.click(
+      screen.getByRole("button", { name: `Preview ${workflow.name}` }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /create workspace draft/i }),
+    );
+    const status = await screen.findByRole("region", {
+      name: "Created workspace draft",
+    });
+    expect(
+      within(status).getByText(/no sample input supplied.*enter.*sample/i),
+    ).toBeTruthy();
+    expect(
+      request.mock.calls.filter((call) => call[1]?.method === "POST"),
+    ).toHaveLength(1);
+  });
   it("recommends a natural-language task or selected category without a focus URL", () => {
     gallery();
     fireEvent.change(screen.getByLabelText("Search recipes"), {
@@ -124,9 +158,9 @@ describe("guided recipes", () => {
     });
     expect(
       within(status)
-        .getByRole("link", { name: /open workflow editor/i })
+        .getByRole("link", { name: /continue setup/i })
         .getAttribute("href"),
-    ).toBe("/w/ws-1/workflows/wf-1/edit");
+    ).toBe("/w/ws-1/workflows/wf-1/edit?recipe=local");
     expect(
       within(status).queryByRole("link", { name: /review attached skill/i }),
     ).toBeNull();
@@ -216,9 +250,15 @@ describe("guided recipes", () => {
     ]);
     expect(
       within(status)
-        .getByRole("link", { name: /open agent editor/i })
+        .getByRole("link", { name: /continue setup/i })
         .getAttribute("href"),
-    ).toBe("/w/ws-1/agents/agent-1");
+    ).toBe("/w/ws-1/agents/agent-1?recipe=faq-answer");
+    expect(
+      request.mock.calls.filter((call) => call[1]?.method === "POST"),
+    ).toHaveLength(1);
+    expect(
+      within(status).queryByRole("button", { name: /create workspace draft/i }),
+    ).toBeNull();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -307,9 +347,9 @@ describe("guided recipes", () => {
       );
       expect(
         within(created)
-          .getByRole("link", { name: /open workflow editor/i })
+          .getByRole("link", { name: /continue setup/i })
           .getAttribute("href"),
-      ).toBe("/w/ws-1/workflows/local-draft/edit");
+      ).toBe(`/w/ws-1/workflows/local-draft/edit?recipe=${key}`);
     },
   );
 

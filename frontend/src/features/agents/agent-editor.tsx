@@ -1,4 +1,5 @@
 "use client";
+import type { RecipeSample } from "@/features/templates/recipe-handoff";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -119,6 +120,7 @@ function parseSchema(text: string): AgentConfig["input_schema"] | null {
 }
 
 export function AgentEditor({
+  recipeSample,
   agent,
   workspaceId,
   versions,
@@ -131,6 +133,7 @@ export function AgentEditor({
   httpTools = [],
   skills = [],
 }: {
+  recipeSample?: RecipeSample;
   agent?: Agent;
   workspaceId: string;
   versions?: VersionList;
@@ -915,6 +918,7 @@ export function AgentEditor({
         </div>
         <aside id="agent-sample" tabIndex={-1} className="builder-try">
           <TryPanel
+            recipeSample={recipeSample}
             configKey={configKey}
             onSampleEvent={sampleEvent}
             workspaceId={workspaceId}

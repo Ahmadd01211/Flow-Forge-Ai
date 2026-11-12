@@ -41,6 +41,7 @@ interface RecipeDetail extends TemplateEntry {
 interface CreatedDraft {
   kind: "agent" | "workflow";
   id: string;
+  template_key?: string;
   skill_ids?: string[];
 }
 
@@ -187,7 +188,7 @@ export function TemplateGallery({
         `/workspaces/${workspaceId}/templates/${item.key}/instantiate`,
         { method: "POST" },
       );
-      setCreated(result);
+      setCreated({ ...result, template_key: result.template_key || item.key });
       requestAnimationFrame(() => createdHeading.current?.focus());
     } catch (cause) {
       setError(
@@ -315,15 +316,20 @@ export function TemplateGallery({
             </>
           )}
           <RunGuidance recipe={preview} />
+          <p>
+            {preview.sample_input
+              ? "Continue setup with this recipe's sample input and expected example. Review them before testing."
+              : "No sample input supplied. Enter your own safe sample in the editor before testing."}
+          </p>
           <Button asChild>
             <Link
               href={
                 created.kind === "agent"
-                  ? `/w/${workspaceId}/agents/${created.id}`
-                  : `/w/${workspaceId}/workflows/${created.id}/edit`
+                  ? `/w/${workspaceId}/agents/${created.id}?recipe=${encodeURIComponent(created.template_key || preview.key)}`
+                  : `/w/${workspaceId}/workflows/${created.id}/edit?recipe=${encodeURIComponent(created.template_key || preview.key)}`
               }
             >
-              Open {created.kind} editor <ArrowRight size={14} />
+              Continue setup <ArrowRight size={14} />
             </Link>
           </Button>
         </section>
@@ -453,6 +459,11 @@ export function TemplateGallery({
                 )}
               </span>
               <div className="row">
+                {item.key === "remove-duplicates" &&
+                  item.kind === "workflow" &&
+                  !item.visibility && (
+                    <Badge tone="green">Try without a model</Badge>
+                  )}
                 {recommended && <Badge tone="green">Recommended</Badge>}
                 <Badge tone="purple">{item.category}</Badge>
               </div>
