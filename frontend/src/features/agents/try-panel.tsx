@@ -152,6 +152,7 @@ export function TryPanel({
     ]);
     setDraft("");
     setBusy(true);
+    let acceptedRunId: string | undefined;
     try {
       const started = await api<{ run: AgentRun }>(
         `/workspaces/${workspaceId}/agents/${agentId}/try`,
@@ -162,6 +163,7 @@ export function TryPanel({
         },
       );
       let run = started.run;
+      acceptedRunId = run.id;
       if (run.state === "waiting") emit("waiting", run.id);
       patch(replyId, { runId: run.id });
       for (let i = 0; i < 90 && !DONE.has(run.state); i++) {
@@ -207,7 +209,7 @@ export function TryPanel({
             : "Still running. Check Executions for the result.",
         });
     } catch (cause) {
-      emit("failed");
+      emit(acceptedRunId ? "unknown" : "failed", acceptedRunId);
       patch(replyId, {
         pending: false,
         error:

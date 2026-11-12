@@ -65,6 +65,57 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 afterEach(cleanup);
+it.each(["status", "events"])(
+  "keeps accepted run identity as unknown when %s polling fails",
+  async (failedRequest) => {
+    vi.useFakeTimers();
+    try {
+      const onSampleEvent = vi.fn();
+      mockApi.mockImplementation((path: string) => {
+        if (path.endsWith("/try"))
+          return Promise.resolve({
+            run: { id: "accepted-run", state: "running" },
+          });
+        const isEvents = path.endsWith("/events");
+        return isEvents === (failedRequest === "events")
+          ? Promise.reject(new Error("Connection lost"))
+          : Promise.resolve(
+              isEvents
+                ? { items: [] }
+                : { id: "accepted-run", state: "running" },
+            );
+      });
+      render(
+        <TryPanel
+          workspaceId="w"
+          agentId="a"
+          config={config}
+          schemasValid
+          canEdit
+          onSampleEvent={onSampleEvent}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Message"), {
+        target: { value: "hello" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await act(async () => {});
+      await act(async () => vi.advanceTimersByTimeAsync(1000));
+      expect(onSampleEvent.mock.calls.at(-1)?.[0]).toMatchObject({
+        ...onSampleEvent.mock.calls[0][0],
+        state: "unknown",
+        runId: "accepted-run",
+      });
+      expect(
+        screen
+          .getByRole("link", { name: /See what happened/ })
+          .getAttribute("href"),
+      ).toBe("/w/w/executions/accepted-run");
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 const check = async () => {
   fireEvent.click(screen.getByRole("button", { name: "Check setup" }));
   await act(async () => {});
