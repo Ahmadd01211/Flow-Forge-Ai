@@ -13,7 +13,12 @@ export type HttpTool = components["schemas"]["HttpToolRead"];
 const objectSchema = '{"type":"object"}';
 
 function objectJson(text: string, label: string): Record<string, unknown> {
-  const value: unknown = JSON.parse(text);
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error(`${label} must contain valid JSON.`);
+  }
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error(`${label} must be a JSON object.`);
   return value as Record<string, unknown>;
@@ -115,6 +120,17 @@ export function HttpToolRegistry({
     setBusy(true);
     setError("");
     try {
+      let endpoint: URL;
+      try {
+        endpoint = new URL(url);
+      } catch {
+        throw new Error("Use a public HTTPS endpoint on port 443.");
+      }
+      if (
+        endpoint.protocol !== "https:" ||
+        (endpoint.port && endpoint.port !== "443")
+      )
+        throw new Error("Use a public HTTPS endpoint on port 443.");
       const value = await api<HttpTool>(base, {
         method: "POST",
         body: JSON.stringify({
@@ -273,6 +289,7 @@ export function HttpToolRegistry({
         {adding ? (
           <form
             className="panel http-tool-form"
+            aria-busy={busy}
             onSubmit={(event) => {
               event.preventDefault();
               void create();
@@ -292,6 +309,13 @@ export function HttpToolRegistry({
                 Cancel
               </Button>
             </div>
+            <ol aria-label="API setup steps">
+              <li>Choose a service or a custom HTTP API.</li>
+              <li>Enter the endpoint, credentials and input contract.</li>
+              <li>Review permissions and approve workspace access.</li>
+              <li>Optionally test a read-only endpoint with your input.</li>
+              <li>Return to workflows and choose an HTTP API node.</li>
+            </ol>
             <section
               className="connector-setup"
               aria-label="Guided connector setup"
@@ -522,7 +546,7 @@ export function HttpToolRegistry({
             </Button>
           </form>
         ) : tool ? (
-          <section className="panel http-tool-form">
+          <section className="panel http-tool-form" aria-busy={busy}>
             <div className="row between">
               <h3>{tool.name}</h3>
               <Badge tone={tool.state === "active" ? "green" : "neutral"}>
@@ -591,6 +615,13 @@ export function HttpToolRegistry({
                 </div>
               </details>
             )}
+            <p className="node-form-hint">
+              Workspace access is approved. Credentials are only checked when
+              the service receives a request.
+            </p>
+            <Link className="text-link" href={`/w/${workspaceId}/workflows`}>
+              Continue to workflows
+            </Link>
             <details>
               <summary>Approved contracts</summary>
               <h4>Input</h4>
