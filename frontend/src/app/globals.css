@@ -4905,3 +4905,24 @@ label select {
 .perf-range button { white-space: nowrap; }
 .perf-tests { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; color: #4c5670; }
 .perf-tests input { width: auto; }
+
+/* Shared guided launch checklist. */
+.launch-checklist { border: 1px solid var(--border); border-radius: 12px; padding: 16px; color: var(--text); }
+.launch-checklist h2 { font-size: 16px; margin: 0 0 12px; }
+.launch-checklist-steps { list-style: none; padding: 0; margin: 0; }
+.launch-checklist-step { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
+.launch-checklist-copy { min-width: 0; overflow-wrap: anywhere; }
+.launch-checklist-copy strong { font-size: 14px; }
+.launch-checklist-status { display: inline-block; margin-left: 10px; font-size: 12px; color: var(--muted); }
+.launch-checklist-copy p, .launch-checklist-permission { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.launch-checklist .button { min-height: 44px; flex-shrink: 0; white-space: normal; }
+.launch-checklist .button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.launch-checklist-notices { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.launch-checklist-notices h3 { font-size: 14px; margin-bottom: 8px; }
+.launch-checklist-notices ul { padding-left: 20px; }
+.launch-checklist-notices li + li { margin-top: 8px; }
+.launch-checklist-notices .button { text-align: left; justify-content: flex-start; }
+@media (max-width: 600px) {
+ .launch-checklist-step { flex-direction: column; align-items: stretch; gap: 10px; }
+ .launch-checklist-status { display: block; margin: 4px 0 0; }
+}
